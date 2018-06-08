@@ -1,44 +1,18 @@
 local concat
 concat = table.concat
-local raw_query
-local proxy_location = "/query"
-local logger
 local type, tostring, pairs, select
 do
   local _obj_0 = _G
   type, tostring, pairs, select = _obj_0.type, _obj_0.tostring, _obj_0.pairs, _obj_0.select
 end
-local FALSE, NULL, TRUE, build_helpers, format_date, is_raw, raw
+local raw_query
+local logger
+local FALSE, NULL, TRUE, build_helpers, format_date, is_raw, raw, is_list, list
 do
   local _obj_0 = require("lapis.db.base")
-  FALSE, NULL, TRUE, build_helpers, format_date, is_raw, raw = _obj_0.FALSE, _obj_0.NULL, _obj_0.TRUE, _obj_0.build_helpers, _obj_0.format_date, _obj_0.is_raw, _obj_0.raw
+  FALSE, NULL, TRUE, build_helpers, format_date, is_raw, raw, is_list, list = _obj_0.FALSE, _obj_0.NULL, _obj_0.TRUE, _obj_0.build_helpers, _obj_0.format_date, _obj_0.is_raw, _obj_0.raw, _obj_0.is_list, _obj_0.list
 end
 local backends = {
-  default = function(_proxy)
-    if _proxy == nil then
-      _proxy = proxy_location
-    end
-    local parser = require("rds.parser")
-    raw_query = function(str)
-      if logger then
-        logger.query(str)
-      end
-      local res = ngx.location.capture(_proxy, {
-        body = str
-      })
-      local out, err = parser.parse(res.body)
-      if not (out) then
-        error(tostring(err) .. ": " .. tostring(str))
-      end
-      do
-        local resultset = out.resultset
-        if resultset then
-          return resultset
-        end
-      end
-      return out
-    end
-  end,
   raw = function(fn)
     do
       raw_query = fn
@@ -93,9 +67,6 @@ local backends = {
 }
 local set_backend
 set_backend = function(name, ...)
-  if name == nil then
-    name = "default"
-  end
   return assert(backends[name])(...)
 end
 local init_logger
@@ -108,13 +79,16 @@ end
 local init_db
 init_db = function()
   local config = require("lapis.config").get()
-  local default_backend = config.postgres and config.postgres.backend or "default"
-  return set_backend(default_backend)
+  local backend = config.postgres and config.postgres.backend
+  if not (backend) then
+    backend = "pgmoon"
+  end
+  return set_backend(backend)
 end
 local escape_identifier
 escape_identifier = function(ident)
   if is_raw(ident) then
-    return ident[2]
+    return ident[1]
   end
   ident = tostring(ident)
   return '"' .. (ident:gsub('"', '""')) .. '"'
@@ -132,8 +106,24 @@ escape_literal = function(val)
     if val == NULL then
       return "NULL"
     end
+    if is_list(val) then
+      local escaped_items
+      do
+        local _accum_0 = { }
+        local _len_0 = 1
+        local _list_0 = val[1]
+        for _index_0 = 1, #_list_0 do
+          local item = _list_0[_index_0]
+          _accum_0[_len_0] = escape_literal(item)
+          _len_0 = _len_0 + 1
+        end
+        escaped_items = _accum_0
+      end
+      assert(escaped_items[1], "can't flatten empty list")
+      return "(" .. tostring(concat(escaped_items, ", ")) .. ")"
+    end
     if is_raw(val) then
-      return val[2]
+      return val[1]
     end
     error("unknown table passed to `escape_literal`")
   end
@@ -319,21 +309,31 @@ do
     grammar = white * Ct(joins ^ -1 * clause ^ 0)
   end
   parse_clause = function(clause)
+    if clause == "" then
+      return { }
+    end
     if not (grammar) then
       make_grammar()
     end
+    local parsed
     do
-      local out = grammar:match(clause)
-      if out then
-        local _tbl_0 = { }
-        for _index_0 = 1, #out do
-          local t = out[_index_0]
-          local _key_0, _val_0 = unpack(t)
-          _tbl_0[_key_0] = _val_0
+      local tuples = grammar:match(clause)
+      if tuples then
+        do
+          local _tbl_0 = { }
+          for _index_0 = 1, #tuples do
+            local t = tuples[_index_0]
+            local _key_0, _val_0 = unpack(t)
+            _tbl_0[_key_0] = _val_0
+          end
+          parsed = _tbl_0
         end
-        return _tbl_0
       end
     end
+    if not parsed or (not next(parsed) and not clause:match("^%s*$")) then
+      return nil, "failed to parse clause: `" .. tostring(clause) .. "`"
+    end
+    return parsed
   end
 end
 local encode_case
@@ -355,6 +355,8 @@ return {
   query = query,
   raw = raw,
   is_raw = is_raw,
+  list = list,
+  is_list = is_list,
   NULL = NULL,
   TRUE = TRUE,
   FALSE = FALSE,

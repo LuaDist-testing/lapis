@@ -1,17 +1,17 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "lapis"
-version = "1.1.1-1"
+version = "1.2.0-1"
 
 -- LuaDist source
 source = {
-  tag = "1.1.1-1",
+  tag = "1.2.0-1",
   url = "git://github.com/LuaDist-testing/lapis.git"
 }
 -- Original source
 -- source = {
 -- 	url = "git://github.com/leafo/lapis.git",
--- 	branch = "v1.1.1",
+-- 	branch = "v1.2.0",
 -- }
 
 description = {
@@ -45,6 +45,8 @@ build = {
 		["lapis.cmd.actions"] = "lapis/cmd/actions.lua",
 		["lapis.cmd.leda"] = "lapis/cmd/leda.lua",
 		["lapis.cmd.nginx"] = "lapis/cmd/nginx.lua",
+		["lapis.cmd.nginx.attached_server"] = "lapis/cmd/nginx/attached_server.lua",
+		["lapis.cmd.nginx.config"] = "lapis/cmd/nginx/config.lua",
 		["lapis.cmd.path"] = "lapis/cmd/path.lua",
 		["lapis.cmd.templates.app"] = "lapis/cmd/templates/app.lua",
 		["lapis.cmd.templates.app_lua"] = "lapis/cmd/templates/app_lua.lua",
@@ -60,12 +62,16 @@ build = {
 		["lapis.csrf"] = "lapis/csrf.lua",
 		["lapis.db"] = "lapis/db.lua",
 		["lapis.db.base"] = "lapis/db/base.lua",
+		["lapis.db.base_model"] = "lapis/db/base_model.lua",
 		["lapis.db.migrations"] = "lapis/db/migrations.lua",
 		["lapis.db.model"] = "lapis/db/model.lua",
+		["lapis.db.model.relations"] = "lapis/db/model/relations.lua",
 		["lapis.db.mysql"] = "lapis/db/mysql.lua",
+		["lapis.db.mysql.model"] = "lapis/db/mysql/model.lua",
 		["lapis.db.mysql.schema"] = "lapis/db/mysql/schema.lua",
 		["lapis.db.pagination"] = "lapis/db/pagination.lua",
 		["lapis.db.postgres"] = "lapis/db/postgres.lua",
+		["lapis.db.postgres.model"] = "lapis/db/postgres/model.lua",
 		["lapis.db.postgres.schema"] = "lapis/db/postgres/schema.lua",
 		["lapis.db.schema"] = "lapis/db/schema.lua",
 		["lapis.environment"] = "lapis/environment.lua",

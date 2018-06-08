@@ -143,7 +143,7 @@ example, you might perform a case insensitive email search like so:
 
 
 ```lua
-local user = Users:find({ [db.raw("lower(email)")] = some_email\lower! })
+local user = Users:find({ [db.raw("lower(email)")] = some_email:lower() })
 ```
 
 ```moon
@@ -292,6 +292,9 @@ create query fetches the values of the primary keys and sets them on the
 instance using the PostgreSQL `RETURNING` statement. This is useful for getting
 the value of an auto-incrementing key from the insert statement.
 
+> In MySQL the *last insert id* is used to get the id of the row since the
+> `RETURNING` statement is not available.
+
 ```lua
 local user = Users:create({
   login = "superuser",
@@ -321,7 +324,7 @@ to the next highest number:
 
 ```lua
 local user = Users:create({
-  position = db.raw("(select coalesce(max(position) + 1, 0) from users)"0
+  position = db.raw("(select coalesce(max(position) + 1, 0) from users)")
 })
 ```
 
@@ -336,6 +339,9 @@ INSERT INTO "users" (position)
 VALUES ((select coalesce(max(position) + 1, 0) from users))
 RETURNING "id", "position"
 ```
+
+> Since `RETURNING` is not available in MySQL, this functionality is PostgreSQL
+> specific.
 
 If your model has any [constraints](#constraints) they will be checked before trying to create
 a new row. If a constraint fails then `nil` and the error message are returned
@@ -393,6 +399,8 @@ The output might look like this:
   }
 }
 ```
+
+> MySQL will return a slightly different format, but will contain the same information.
 
 ### `table_name()`
 
@@ -620,7 +628,7 @@ local schema = require "lapis.db.schema"
 
 scehma.create_table("some_table", {
   -- ...
-  {"created_at", schema.types.time}
+  {"created_at", schema.types.time},
   {"updated_at", schema.types.time}
   -- ...
 })
@@ -763,7 +771,7 @@ manually specify the name we can do something like this:
 
 
 ```lua
-Users:include_in(posts, "user_id", { as: "author" })
+Users:include_in(posts, "user_id", { as = "author" })
 ```
 
 ```moon
@@ -805,7 +813,7 @@ user data:
 
 ```lua
 local users = Users:select()
-UserData:include_in(users, "user_id", { flip: true })
+UserData:include_in(users, "user_id", { flip = true })
 
 print(users[1].user_data.twitter_account)
 ```
@@ -830,12 +838,36 @@ instances is created from the name of the included table. In the example above
 the `user_data` property contains the included model instances. (Had it been
 plural the table name would have been made singular)
 
+One last common scenario is preloading a one-to-many relationship. You can use
+the `many` option to instruct `include_in` store many associated models for
+each input model. For example, we might load all the posts for each user:
+
+
+```lua
+local users = Users:select()
+Posts:include_in(users, "user_id", { flip = true, many = true })
+```
+
+```moon
+users = Users\select!
+Posts\include_in users, "user_id", flip: true, many: true
+```
+
+```sql
+SELECT * from "posts" where "user_id" in (1,2,3,4,5,6)
+```
+
+Each `users` object will now have a `posts` field that is an array containing
+all the associated posts that were found.
+
+
 `include_in` supports the following options, including `as` and `flip` from above:
 
 * `as` -- set the name of the property to store the associated model as
 * `flip` -- set to `true` if the named column is located on the included model
 * `where` -- a table of additional conditionals to limit the query by
 * `fields` -- set the fields returned by each included model
+* `many` -- set to true fetch many records for each input model instance instead of a single one
 
 ## Constraints
 
@@ -851,7 +883,7 @@ local Model = require("lapis.db.model").Model
 local Users = Model:extend("users", {
   constraints = {
     name = function(self, value)
-      if value:lower() == "admin"
+      if value:lower() == "admin" then
         return "User can not be named admin"
       end
     end
@@ -1242,7 +1274,8 @@ SELECT * from "user_profiles" where "owner_id" = 123;
 
 ### `has_many`
 
-A one to many relation, returns a [`Pager` object](#pagination).
+A one to many relation. It defines two methods, one that returns a [`Pager`
+object](#pagination), and one that fetches all of the objects.
 
 ```lua
 local Model = require("lapis.db.model").Model
@@ -1262,20 +1295,93 @@ class Users extends Model
   }
 ```
 
+We can use the `get_` method to fetch all the associated records. If the
+relation has already been fetched then it will return the cached value. The
+cached value is stored in a field on the model that matches the name of the
+relation.
+
 ```lua
-local posts = user:get_posts({per_page = 20}):get_page(3)
+local posts = user:get_posts()
 ```
 
 ```moon
-local posts = user\get_posts(per_page: 20)\get_page 3
+posts = user\get_posts!
+```
+
+```sql
+SELECT * from "posts" where "user_id" = 123
+```
+
+The `has_many` relation also creates a `get_X_paginated` method for getting a
+pager that points to the related objects. This is useful if you know the
+relation could include a large number of things and it does not make sense to
+fetch them all at once.
+
+Any arguments passed to the paginated getter are passed to the pager's
+constructor, so you can specify things like `fields`, `prepare_reults`, and
+`per_page`:
+
+
+```lua
+local posts = user:get_posts_paginated({per_page = 20}):get_page(3)
+```
+
+```moon
+posts = user\get_posts_paginated(per_page: 20)\get_page 3
 ```
 
 ```sql
 SELECT * from "posts" where "user_id" = 123 LIMIT 20 OFFSET 40
 ```
 
-You can override the foreign key column name by passing a `key` relation
-property.
+
+The `has_many` relation supports a few more options:
+
+* `key` -- the foreign key to search on, defaults to appending `_id` to the singular form of the table name, eg. `Users` → `user_id`
+* `where` -- set additional constraints on the things returned, as a table
+* `order` -- a SQL fragment as a string used to specify `order by` clause in the queries
+* `as` -- specify the prefix of the generated methods (defaults to `get_NAME`)
+
+
+Here's a more complex exmaple using some of the options:
+
+```lua
+local Model = require("lapis.db.model").Model
+
+local Users = Model:extend("users", {
+  relations = {
+    {"authored_posts",
+			has_many = "Posts",
+			where = {deleted = false},
+			order = "id desc",
+			key = "poster_id"}
+  }
+})
+```
+
+```moon
+import Model from require "lapis.db.models"
+class Users extends Model
+  @relations: {
+    {"authored_posts"
+			has_many: "Posts"
+			where: {deleted: false}
+			order: "id desc"
+			key: "poster_id"}
+  }
+```
+
+```lua
+local posts = user:get_authored_posts()
+```
+
+```moon
+posts = user\get_authored_posts!
+```
+
+```sql
+SELECT * from "posts" where "poster_id" = 123 and deleted = FALSE order by id desc
+```
 
 ### `fetch`
 

@@ -1,6 +1,9 @@
+config = require "lapis.config"
+config.default_config.postgres = {backend: "pgmoon"}
+config.reset true
 
 db = require "lapis.db.postgres"
-import Model from require "lapis.db.model"
+import Model from require "lapis.db.postgres.model"
 import with_query_fn, assert_queries from require "spec.helpers"
 
 time = 1376377000
@@ -21,6 +24,9 @@ describe "lapis.db.model", ->
       -- try to find a mock
       for k,v in pairs query_mock
         if q\match k
+          if type(v) == "function"
+            v = v!
+
           return v
 
       {}
@@ -37,6 +43,14 @@ describe "lapis.db.model", ->
   before_each ->
     queries = {}
     query_mock = {}
+
+  it "should get singular name", ->
+    assert.same "thing", (class Things extends Model)\singular_name!
+    assert.same "category", (class Categories extends Model)\singular_name!
+
+  it "should get table name", ->
+    assert.same "banned_users", (class BannedUsers extends Model)\table_name!
+    assert.same "categories", (class Categories extends Model)\table_name!
 
   it "should select", ->
     class Things extends Model
@@ -594,7 +608,7 @@ describe "lapis.db.model", ->
         'SELECT * from "user_data" where "owner_id" = 123 limit 1'
       }, queries
 
-    it "should make has_many getter", ->
+    it "should make has_many paginated getter", ->
       query_mock['SELECT'] = { { id: 101 } }
 
       models.Posts = class extends Model
@@ -607,12 +621,12 @@ describe "lapis.db.model", ->
       user = models.Users!
       user.id = 1234
 
-      user\get_posts!\get_page 1
-      user\get_posts!\get_page 2
+      user\get_posts_paginated!\get_page 1
+      user\get_posts_paginated!\get_page 2
 
-      user\get_more_posts!\get_page 2
+      user\get_more_posts_paginated!\get_page 2
 
-      user\get_posts(per_page: 44)\get_page 3
+      user\get_posts_paginated(per_page: 44)\get_page 3
 
       assert_queries {
         'SELECT * from "posts" where "user_id" = 1234 limit 10 offset 0 '
@@ -624,7 +638,35 @@ describe "lapis.db.model", ->
         'SELECT * from "posts" where "user_id" = 1234 limit 44 offset 88 '
       }, queries
 
-    it "should create relations for inheritance #ddd", ->
+
+    it "should make has_many getter ", ->
+      models.Posts = class extends Model
+      models.Users = class extends Model
+        @relations: {
+          {"posts", has_many: "Posts"}
+          {"more_posts", has_many: "Posts", where: {color: "blue"}}
+          {"fresh_posts", has_many: "Posts", order: "id desc"}
+        }
+
+      user = models.Users!
+      user.id = 1234
+
+      user\get_posts!
+      user\get_posts!
+
+      user\get_more_posts!
+      user\get_fresh_posts!
+
+      assert_queries {
+        'SELECT * from "posts" where "user_id" = 1234'
+        {
+          [[SELECT * from "posts" where "user_id" = 1234 AND "color" = 'blue']]
+          [[SELECT * from "posts" where "color" = 'blue' AND "user_id" = 1234]]
+        }
+        'SELECT * from "posts" where "user_id" = 1234 order by id desc'
+      }, queries
+
+    it "should create relations for inheritance", ->
       class Base extends Model
         @relations: {
           {"user", belongs_to: "Users"}
@@ -637,6 +679,121 @@ describe "lapis.db.model", ->
 
       assert Child.get_user, "expecting get_user"
       assert Child.get_category, "expecting get_category"
+
+    describe "polymorphic belongs to #ddd", ->
+      local Foos, Bars, Bazs, Items
+
+      before_each ->
+        models.Foos = class Foos extends Model
+        models.Bars = class Bars extends Model
+        models.Bazs = class Bazs extends Model
+
+        Items = class Items extends Model
+          @relations: {
+            {"object", polymorphic_belongs_to: {
+              [1]: {"foo", "Foos"}
+              [2]: {"bar", "Bars"}
+              [3]: {"baz", "Bazs"}
+            }}
+          }
+
+      it "should model_for_object_type", ->
+        assert Foos == Items\model_for_object_type 1
+        assert Foos == Items\model_for_object_type "foo"
+
+        assert Bars == Items\model_for_object_type 2
+        assert Bars == Items\model_for_object_type "bar"
+
+        assert Bazs == Items\model_for_object_type 3
+        assert Bazs == Items\model_for_object_type "baz"
+
+        assert.has_error ->
+          Items\model_for_object_type 4
+
+        assert.has_error ->
+          Items\model_for_object_type "bun"
+
+      it "should object_type_for_model", ->
+        assert.same 1, Items\object_type_for_model Foos
+        assert.same 2, Items\object_type_for_model Bars
+        assert.same 3, Items\object_type_for_model Bazs
+
+        assert.has_error ->
+          Items\object_type_for_model Items
+
+      it "should object_type_for_object", ->
+        assert.same 1, Items\object_type_for_object Foos!
+        assert.same 2, Items\object_type_for_object Bars!
+        assert.same 3, Items\object_type_for_object Bazs
+
+        assert.has_error ->
+          Items\object_type_for_model {}
+
+      it "should call getter", ->
+        query_mock['SELECT'] = -> { { id: 101 } }
+
+        for i, {type_id, cls} in ipairs {{1, Foos}, {2, Bars}, {3, Bazs}}
+          item = Items\load {
+            object_type: type_id
+            object_id: i * 33
+          }
+
+          obj = item\get_object!
+
+          obj.__class == cls
+
+          obj2 = item\get_object!
+
+          assert.same obj, obj2
+
+        assert_queries {
+          'SELECT * from "foos" where "id" = 33 limit 1'
+          'SELECT * from "bars" where "id" = 66 limit 1'
+          'SELECT * from "bazs" where "id" = 99 limit 1'
+        }, queries
+
+
+      it "should call preload with empty", ->
+        Items\preload_objects {}
+
+        assert_queries {
+        }, queries
+
+      it "should call preload", ->
+        k = 0
+        n = ->
+          k += 1
+          k
+
+        items = {
+          Items\load {
+            object_type: 1
+            object_id: n!
+          }
+
+          Items\load {
+            object_type: 2
+            object_id: n!
+          }
+
+          Items\load {
+            object_type: 1
+            object_id: n!
+          }
+
+          Items\load {
+            object_type: 1
+            object_id: n!
+          }
+        }
+
+        Items\preload_objects items
+
+        assert_queries {
+          'SELECT * from "foos" where "id" in (1, 3, 4)'
+          'SELECT * from "bars" where "id" in (2)'
+        }, queries
+
 
   describe "enum", ->
     import enum from require "lapis.db.model"

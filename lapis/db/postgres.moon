@@ -1,12 +1,9 @@
 import concat from table
+import type, tostring, pairs, select from _G
 
 local raw_query
-
-proxy_location = "/query"
-
 local logger
 
-import type, tostring, pairs, select from _G
 import
   FALSE
   NULL
@@ -15,23 +12,13 @@ import
   format_date
   is_raw
   raw
+  is_list
+  list
   from require "lapis.db.base"
 
 backends = {
-  default: (_proxy=proxy_location) ->
-    parser = require "rds.parser"
-    raw_query = (str) ->
-      logger.query str if logger
-      res = ngx.location.capture _proxy, {
-        body: str
-      }
-      out, err = parser.parse res.body
-      error "#{err}: #{str}" unless out
-
-      if resultset = out.resultset
-        return resultset
-      out
-
+  -- the raw backend is a debug backend that lets you specify the function that
+  -- handles the query
   raw: (fn) ->
     with raw_query
       raw_query = fn
@@ -74,7 +61,7 @@ backends = {
       res
 }
 
-set_backend = (name="default", ...) ->
+set_backend = (name, ...) ->
   assert(backends[name]) ...
 
 init_logger = ->
@@ -84,11 +71,14 @@ init_logger = ->
 
 init_db = ->
   config = require("lapis.config").get!
-  default_backend = config.postgres and config.postgres.backend or "default"
-  set_backend default_backend
+  backend = config.postgres and config.postgres.backend
+  unless backend
+    backend = "pgmoon"
+
+  set_backend backend
 
 escape_identifier = (ident) ->
-  return ident[2] if is_raw ident
+  return ident[1] if is_raw ident
   ident = tostring ident
   '"' ..  (ident\gsub '"', '""') .. '"'
 
@@ -102,7 +92,12 @@ escape_literal = (val) ->
       return val and "TRUE" or "FALSE"
     when "table"
       return "NULL" if val == NULL
-      return val[2] if is_raw val
+      if is_list val
+        escaped_items = [escape_literal item for item in *val[1]]
+        assert escaped_items[1], "can't flatten empty list"
+        return "(#{concat escaped_items, ", "})"
+
+      return val[1] if is_raw val
       error "unknown table passed to `escape_literal`"
 
   error "don't know how to escape value: #{val}"
@@ -263,10 +258,17 @@ parse_clause = do
     grammar = white * Ct joins^-1 * clause^0
 
   (clause) ->
-    make_grammar! unless grammar
-    if out = grammar\match clause
-      { unpack t for t in *out }
+    return {} if clause == ""
 
+    make_grammar! unless grammar
+
+    parsed = if tuples = grammar\match clause
+      { unpack t for t in *tuples }
+
+    if not parsed or (not next(parsed) and not clause\match "^%s*$")
+      return nil, "failed to parse clause: `#{clause}`"
+
+    parsed
 
 encode_case = (exp, t, on_else) ->
   buff = {
@@ -283,7 +285,7 @@ encode_case = (exp, t, on_else) ->
   concat buff
 
 {
-  :query, :raw, :is_raw, :NULL, :TRUE, :FALSE, :escape_literal,
+  :query, :raw, :is_raw, :list, :is_list, :NULL, :TRUE, :FALSE, :escape_literal,
   :escape_identifier, :encode_values, :encode_assigns, :encode_clause,
   :interpolate_query, :parse_clause, :format_date, :encode_case, :init_logger
 
