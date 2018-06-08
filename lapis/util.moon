@@ -53,12 +53,20 @@ encode_query_string = (t, sep="&") ->
   for k,v in pairs t
     if type(k) == "number" and type(v) == "table"
       {k,v} = v
+      v = true if v == nil -- symmetrical with parse
+
+    if v == false
+      continue
 
     buf[i + 1] = _escape k
-    buf[i + 2] = "="
-    buf[i + 3] = _escape v
-    buf[i + 4] = sep
-    i += 4
+    if v == true
+      buf[i + 2] = sep
+      i += 2
+    else
+      buf[i + 2] = "="
+      buf[i + 3] = _escape v
+      buf[i + 4] = sep
+      i += 4
 
   buf[i] = nil
   concat buf

@@ -34,7 +34,7 @@ parse_multipart = function()
       table.insert(current.content, res)
     elseif "header" == _exp_0 then
       local name, value = unpack(res)
-      if name == "Content-Disposition" then
+      if name:lower() == "content-disposition" then
         do
           local params = parse_content_disposition(value)
           if params then
@@ -109,7 +109,8 @@ local ngx_req = {
   end,
   parsed_url = function(t)
     local uri = ngx.var.request_uri
-    uri = uri:match("(.-)%?") or uri
+    local pos = uri:find("?")
+    uri = pos and uri:sub(1, pos - 1) or uri
     local host_header = ngx.var.http_host
     return {
       scheme = ngx.var.scheme,

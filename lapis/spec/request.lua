@@ -19,6 +19,20 @@ do
     })
   end
 end
+local add_cookie
+add_cookie = function(headers, name, val)
+  local escape
+  escape = require("lapis.util").escape
+  local assign = tostring(escape(name)) .. "=" .. tostring(escape(val))
+  do
+    local old = headers.Cookie
+    if old then
+      headers.Cookie = tostring(old) .. "; " .. tostring(assign)
+    else
+      headers.Cookie = assign
+    end
+  end
+end
 local mock_request
 mock_request = function(app_cls, url, opts)
   if opts == nil then
@@ -82,8 +96,19 @@ mock_request = function(app_cls, url, opts)
     Host = host,
     Cookie = prev_request.set_cookie
   }
+  if opts.cookies then
+    for k, v in pairs(opts.cookies) do
+      add_cookie(headers, k, v)
+    end
+  end
   if opts.post then
     headers["Content-type"] = "application/x-www-form-urlencoded"
+  end
+  if opts.session then
+    local config = require("lapis.config").get()
+    local encode_session
+    encode_session = require("lapis.session").encode_session
+    add_cookie(headers, config.session_name, encode_session(opts.session))
   end
   if opts.headers then
     for k, v in pairs(opts.headers) do
@@ -108,6 +133,12 @@ mock_request = function(app_cls, url, opts)
       end
     end
     return accum
+  end
+  local hex
+  hex = function(str)
+    return (str:gsub(".", function(c)
+      return string.format("%02x", string.byte(c))
+    end))
   end
   stack.push({
     print = function(...)
@@ -134,6 +165,10 @@ mock_request = function(app_cls, url, opts)
     say = function(...)
       ngx.print(...)
       return ngx.print("\n")
+    end,
+    md5 = function(str)
+      local digest = require("openssl.digest")
+      return hex((digest.new("md5")):final(str))
     end,
     header = out_headers,
     now = function()

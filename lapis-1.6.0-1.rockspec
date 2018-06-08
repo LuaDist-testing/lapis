@@ -1,17 +1,17 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "lapis"
-version = "1.5.1-1"
+version = "1.6.0-1"
 
 -- LuaDist source
 source = {
-  tag = "1.5.1-1",
+  tag = "1.6.0-1",
   url = "git://github.com/LuaDist-testing/lapis.git"
 }
 -- Original source
 -- source = {
 -- 	url = "git://github.com/leafo/lapis.git",
--- 	branch = "v1.5.1"
+-- 	branch = "v1.6.0"
 -- }
 
 description = {
@@ -30,11 +30,11 @@ dependencies = {
 	"loadkit",
 	"lpeg",
 	"lua-cjson",
-	"luacrypto",
+	"luaossl",
 	"luafilesystem",
 	"luasocket",
 	"mimetypes",
-	"pgmoon >= 1.2.0",
+	"pgmoon",
 }
 
 build = {
@@ -44,8 +44,12 @@ build = {
 		["lapis.application"] = "lapis/application.lua",
 		["lapis.cache"] = "lapis/cache.lua",
 		["lapis.cmd.actions"] = "lapis/cmd/actions.lua",
-		["lapis.cmd.leda"] = "lapis/cmd/leda.lua",
+		["lapis.cmd.attached_server"] = "lapis/cmd/attached_server.lua",
+		["lapis.cmd.cqueues"] = "lapis/cmd/cqueues.lua",
+		["lapis.cmd.cqueues.actions"] = "lapis/cmd/cqueues/actions.lua",
+		["lapis.cmd.cqueues.attached_server"] = "lapis/cmd/cqueues/attached_server.lua",
 		["lapis.cmd.nginx"] = "lapis/cmd/nginx.lua",
+		["lapis.cmd.nginx.actions"] = "lapis/cmd/nginx/actions.lua",
 		["lapis.cmd.nginx.attached_server"] = "lapis/cmd/nginx/attached_server.lua",
 		["lapis.cmd.nginx.config"] = "lapis/cmd/nginx/config.lua",
 		["lapis.cmd.path"] = "lapis/cmd/path.lua",
@@ -63,6 +67,7 @@ build = {
 		["lapis.cmd.templates.tup"] = "lapis/cmd/templates/tup.lua",
 		["lapis.cmd.util"] = "lapis/cmd/util.lua",
 		["lapis.config"] = "lapis/config.lua",
+		["lapis.cqueues"] = "lapis/cqueues.lua",
 		["lapis.csrf"] = "lapis/csrf.lua",
 		["lapis.db"] = "lapis/db.lua",
 		["lapis.db.base"] = "lapis/db/base.lua",
@@ -84,8 +89,6 @@ build = {
 		["lapis.flow"] = "lapis/flow.lua",
 		["lapis.html"] = "lapis/html.lua",
 		["lapis.http"] = "lapis/http.lua",
-		["lapis.leda"] = "lapis/leda.lua",
-		["lapis.leda.files"] = "lapis/leda/files.lua",
 		["lapis.logging"] = "lapis/logging.lua",
 		["lapis.lua"] = "lapis/lua.lua",
 		["lapis.nginx"] = "lapis/nginx.lua",
@@ -103,6 +106,7 @@ build = {
 		["lapis.spec.server"] = "lapis/spec/server.lua",
 		["lapis.spec.shared"] = "lapis/spec/shared.lua",
 		["lapis.spec.stack"] = "lapis/spec/stack.lua",
+		["lapis.time"] = "lapis/time.lua",
 		["lapis.util"] = "lapis/util.lua",
 		["lapis.util.encoding"] = "lapis/util/encoding.lua",
 		["lapis.util.functions"] = "lapis/util/functions.lua",

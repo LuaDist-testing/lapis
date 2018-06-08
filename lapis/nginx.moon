@@ -22,7 +22,7 @@ parse_multipart = ->
         table.insert current.content, res
       when "header"
         name, value = unpack res
-        if name == "Content-Disposition"
+        if name\lower! == "content-disposition"
           if params = parse_content_disposition value
             for tuple in *params
               current[tuple[1]] = tuple[2]
@@ -66,7 +66,8 @@ ngx_req = {
 
   parsed_url: (t) ->
     uri = ngx.var.request_uri
-    uri = uri\match("(.-)%?") or uri
+    pos = uri\find("?")
+    uri = pos and uri\sub(1, pos-1) or uri
     host_header = ngx.var.http_host
 
     {

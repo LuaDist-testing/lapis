@@ -96,6 +96,8 @@ options in a table:
 * `post` -- A table of POST parameters (sets default method to `"POST"`)
 * `method` -- The HTTP method to use (defaults to `"GET"`)
 * `headers` -- Additional HTTP request headers
+* `cookies` -- A table of cookies to insert into headers
+* `session` -- A session table to encode into the cookies
 * `host` -- The host the mocked server (defaults to `"localhost"`)
 * `port` -- The port of the mocked server (defaults to `80`)
 * `scheme` -- The scheme of the mocked server (defaults to `"http"`)
@@ -276,6 +278,7 @@ supports the following options in the table:
 * `post` -- A table of POST parameters. Sets default method to `"POST"`,
   encodes the table as the body of the request and sets the `Content-type`
   header to `application/x-www-form-urlencoded`
+* `data` -- The body of the HTTP request as a string. The `Content-length` header is automatically set to the length of the string
 * `method` -- The HTTP method to use (defaults to `"GET"`)
 * `headers` -- Additional HTTP request headers
 * `expect` -- What type of response to expect, currently only supports
