@@ -207,6 +207,7 @@ belongs_to = function(self, name, opts)
   self.relation_preloaders[name] = function(self, objects, preload_opts)
     local model = assert_model(self.__class, source)
     preload_opts = preload_opts or { }
+    preload_opts.as = name
     preload_opts.for_relation = name
     return model:include_in(objects, column_name, preload_opts)
   end
@@ -232,7 +233,7 @@ has_one = function(self, name, opts)
     local model = assert_model(self.__class, source)
     local foreign_key = opts.key or tostring(self.__class:singular_name()) .. "_id"
     local clause = {
-      [foreign_key] = self[self.__class:primary_keys()]
+      [foreign_key] = self[opts.local_key or self.__class:primary_keys()]
     }
     do
       local where = opts.where
@@ -251,11 +252,13 @@ has_one = function(self, name, opts)
   self.relation_preloaders[name] = function(self, objects, preload_opts)
     local model = assert_model(self.__class, source)
     local foreign_key = opts.key or tostring(self.__class:singular_name()) .. "_id"
+    local local_key = opts.local_key or self.__class:primary_keys()
     preload_opts = preload_opts or { }
     preload_opts.flip = true
     preload_opts.for_relation = name
     preload_opts.as = name
     preload_opts.where = preload_opts.where or opts.where
+    preload_opts.local_key = local_key
     return model:include_in(objects, foreign_key, preload_opts)
   end
 end
@@ -269,7 +272,7 @@ has_many = function(self, name, opts)
   build_query = function(self)
     local foreign_key = opts.key or tostring(self.__class:singular_name()) .. "_id"
     local clause = {
-      [foreign_key] = self[self.__class:primary_keys()]
+      [foreign_key] = self[opts.local_key or self.__class:primary_keys()]
     }
     do
       local where = opts.where
@@ -317,11 +320,13 @@ has_many = function(self, name, opts)
   self.relation_preloaders[name] = function(self, objects, preload_opts)
     local model = assert_model(self.__class, source)
     local foreign_key = opts.key or tostring(self.__class:singular_name()) .. "_id"
+    local local_key = opts.local_key or self.__class:primary_keys()
     preload_opts = preload_opts or { }
     preload_opts.flip = true
     preload_opts.many = true
     preload_opts.for_relation = name
     preload_opts.as = name
+    preload_opts.local_key = local_key
     preload_opts.order = preload_opts.order or opts.order
     preload_opts.where = preload_opts.where or opts.where
     return model:include_in(objects, foreign_key, preload_opts)

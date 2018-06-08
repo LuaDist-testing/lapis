@@ -166,6 +166,24 @@ describe "lapis.db.model.relations", ->
       'SELECT * from "user_data" where "owner_id" = 123 limit 1'
     }
 
+  it "should make has_one getter key and local key", ->
+    mock_query "SELECT", { { id: 101, thing_email: "leafo@leafo" } }
+
+    models.Things = class extends Model
+
+    models.Users = class Users extends Model
+      @relations: {
+        {"data", has_one: "Things", local_key: "email", key: "thing_email"}
+      }
+
+    user = Users!
+    user.id = 123
+    user.email = "leafo@leafo"
+    assert user\get_data!
+
+    assert_queries {
+      [[SELECT * from "things" where "thing_email" = 'leafo@leafo' limit 1]]
+    }
 
   it "should make has_one getter with where clause", ->
     mock_query "SELECT", { { id: 101 } }
@@ -187,7 +205,6 @@ describe "lapis.db.model.relations", ->
         [[SELECT * from "user_data" where "state" = 'good' AND "owner_id" = 123 limit 1]]
       }
     }
-
 
   it "should make has_many paginated getter", ->
     mock_query "SELECT", { { id: 101 } }
@@ -541,6 +558,34 @@ describe "lapis.db.model.relations", ->
         [[SELECT a,b from "tags" where "post_id" in (123) order by b asc]]
       }
 
+    it "preloads has_one with key and local_key", ->
+      mock_query "SELECT", {
+        { id: 99, thing_email: "notleafo@leafo" }
+        { id: 101, thing_email: "leafo@leafo" }
+      }
+
+      models.Things = class extends Model
+
+      models.Users = class Users extends Model
+        @relations: {
+          {"thing", has_one: "Things", local_key: "email", key: "thing_email"}
+        }
+
+      user = Users!
+      user.id = 123
+      user.email = "leafo@leafo"
+
+      Users\preload_relations {user}, "thing"
+
+      assert_queries {
+        [[SELECT * from "things" where "thing_email" in ('leafo@leafo')]]
+      }
+
+      assert.same {
+        id: 101
+        thing_email: "leafo@leafo"
+      }, user.thing
+
     it "preloads has_one with where", ->
       mock_query "SELECT", {
         { thing_id: 123, name: "whaz" }
@@ -674,4 +719,43 @@ describe "lapis.db.model.relations", ->
       }
 
       JointPosts\preload_relations {p}, "user", "second_user"
+
+  describe "has_one", ->
+    it "preloads when using custom keys", ->
+      mock_query "SELECT", {
+        {user_id: 100, name: "first"}
+        {user_id: 101, name: "second"}
+      }
+
+      models.UserItems = class UserItems extends Model
+        @primary_key: "user_id"
+
+        @relations: {
+          {"application", has_one: "ItemApplications", key: "user_id"}
+        }
+
+        new: (user_id) =>
+          @user_id = assert user_id, "missing user id"
+
+      models.ItemApplications = class ItemApplications extends Model
+        id = 1
+        new: (user_id) =>
+          @user_id = assert user_id, "missing user id"
+          @id = id
+          id += 1
+
+      ui = UserItems 100
+      a = assert ui\get_application!, "expected to get relation"
+      assert.same 100, a.user_id
+
+      ui2 = UserItems 101
+      UserItems\preload_relations {ui2}, "application"
+      a = assert ui2.application, "expected to get relation"
+      assert.same 101, a.user_id
+
+      assert_queries {
+        [[SELECT * from "item_applications" where "user_id" = 100 limit 1]]
+        [[SELECT * from "item_applications" where "user_id" in (101)]]
+      }
+
 

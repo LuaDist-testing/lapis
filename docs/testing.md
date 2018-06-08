@@ -12,8 +12,8 @@ of this method is that it's faster and errors happen within the test process.
 The second type uses the test server. The test server is a temporary Nginx
 server spawned for the duration of your tests that allows you to issue full
 HTTP requests. The advantage is you can test both Nginx configuration and your
-application at the same time. It very closely resembles how your application
-will run in production.
+application at the same time, as well as allow your application to use ngx.*
+features. It very closely resembles how your application will run in production.
 
 You are free to use any testing framework you like, but in these examples we'll
 be using [Busted](http://olivinelabs.com/busted/).
@@ -227,10 +227,11 @@ describe "my_site", ->
 ```
 
 The test server will either spawn a new Nginx if one isn't running, or it will
-take over your development server until `close_test_server` is called. Taking
-over the development server can be useful because the same stdout is used, so
-any output from the server is written to a terminal you might already have
-open.
+take over your development server until `close_test_server` is called 
+(`use_test_server` automatically calls that for you, but you can call it manually
+if you wish). Taking over the development server can be useful because the same 
+stdout is used, so any output from the server is written to a terminal you might 
+already have open.
 
 ### `request(path, options={})`
 
@@ -280,7 +281,7 @@ supports the following options in the table:
 * `expect` -- What type of response to expect, currently only supports
   `"json"`. It will parse the body automatically into a Lua table or throw an
   error if the body is not valid JSON.
-* `port` -- The port of the server, defaults to the randomly assigned port defined autmatically when running tests
+* `port` -- The port of the server, defaults to the randomly assigned port defined automatically when running tests
 
 The function has three return values: the status code as a number, the body of
 the response and any response headers in a table.

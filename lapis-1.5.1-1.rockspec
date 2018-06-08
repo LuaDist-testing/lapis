@@ -1,9 +1,18 @@
-package = "lapis"
-version = "dev-1"
+-- This file was automatically generated for the LuaDist project.
 
+package = "lapis"
+version = "1.5.1-1"
+
+-- LuaDist source
 source = {
-	url = "git://github.com/leafo/lapis.git"
+  tag = "1.5.1-1",
+  url = "git://github.com/LuaDist-testing/lapis.git"
 }
+-- Original source
+-- source = {
+-- 	url = "git://github.com/leafo/lapis.git",
+-- 	branch = "v1.5.1"
+-- }
 
 description = {
 	summary = "A web framework for MoonScript & Lua",
@@ -80,6 +89,7 @@ build = {
 		["lapis.logging"] = "lapis/logging.lua",
 		["lapis.lua"] = "lapis/lua.lua",
 		["lapis.nginx"] = "lapis/nginx.lua",
+		["lapis.nginx.cache"] = "lapis/nginx/cache.lua",
 		["lapis.nginx.context"] = "lapis/nginx/context.lua",
 		["lapis.nginx.http"] = "lapis/nginx/http.lua",
 		["lapis.nginx.postgres"] = "lapis/nginx/postgres.lua",
@@ -105,4 +115,3 @@ build = {
 		bin = { "bin/lapis" }
 	},
 }
-
