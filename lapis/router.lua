@@ -230,9 +230,9 @@ do
       end
       local splat = P("*")
       local var = P(":") * alpha * alpha_num ^ 0
+      var = C(var) * (P("[") * C((1 - P("]")) ^ 1) * P("]")) ^ -1
       self.var = var
       self.splat = splat
-      var = C(var) * (P("[") * C((1 - P("]")) ^ 1) * P("]")) ^ -1
       local chunk = var / make_var + splat / make_splat
       chunk = (1 - chunk) ^ 1 / make_lit + chunk
       local compile_chunks
@@ -351,6 +351,7 @@ do
       if params == nil then
         params = { }
       end
+      local optional_stack
       local replace
       replace = function(s)
         local param_name = s:sub(2)
@@ -368,13 +369,41 @@ do
                 end
               end
             end
-            return val
+            if optional_stack then
+              optional_stack.hits = optional_stack.hits + 1
+            end
+            return val, true
           else
+            if optional_stack then
+              optional_stack.misses = optional_stack.misses + 1
+            end
             return ""
           end
         end
       end
-      local patt = Cs((self.parser.var / replace + self.parser.splat / (params.splat or "") + 1) ^ 0)
+      local patt = Cs(P({
+        "string",
+        replacement = self.parser.var / replace + self.parser.splat / (function()
+          return replace(":splat")
+        end) + V("optional"),
+        optional = Cmt("(", function(_, k)
+          optional_stack = {
+            hits = 0,
+            misses = 0,
+            prev = optional_stack
+          }
+          return true, ""
+        end) * Cmt(Cs((V("replacement") + 1 - ")") ^ 0) * P(")"), function(_, k, match)
+          local result = optional_stack
+          optional_stack = optional_stack.prev
+          if result.hits > 0 and result.misses == 0 then
+            return true, match
+          else
+            return true, ""
+          end
+        end),
+        string = (V("replacement") + 1) ^ 0
+      }))
       return patt:match(path)
     end,
     url_for = function(self, name, params, query)

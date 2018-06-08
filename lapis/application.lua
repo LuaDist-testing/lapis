@@ -46,23 +46,24 @@ do
     add_params = function(self, params, name)
       self[name] = params
       for k, v in pairs(params) do
-        do
-          local front = k:match("^([^%[]+)%[")
-          if front then
-            local curr = self.params
-            for match in k:gmatch("%[(.-)%]") do
-              local new = curr[front]
-              if new == nil then
-                new = { }
-                curr[front] = new
-              end
-              curr = new
-              front = match
+        local front
+        if type(k) == "string" then
+          front = k:match("^([^%[]+)%[")
+        end
+        if front then
+          local curr = self.params
+          for match in k:gmatch("%[(.-)%]") do
+            local new = curr[front]
+            if new == nil then
+              new = { }
+              curr[front] = new
             end
-            curr[front] = v
-          else
-            self.params[k] = v
+            curr = new
+            front = match
           end
+          curr[front] = v
+        else
+          self.params[k] = v
         end
       end
     end,
@@ -144,6 +145,8 @@ do
         local layout_cls
         if type(layout_path) == "string" then
           layout_cls = require(tostring(self.app.views_prefix) .. "." .. tostring(layout_path))
+        elseif type(self.app.layout) == "string" then
+          layout_cls = require(tostring(self.app.views_prefix) .. "." .. tostring(self.app.layout))
         else
           layout_cls = self.app.layout
         end

@@ -184,6 +184,8 @@ class="for_lua">`self:url_for()`</span>. The first argument is the name of the
 route, and the second optional argument is a table of values to fill a
 parameterized route with.
 
+[Read more about `url_for`](#request-object-methods/url_for).
+
 ## Handling HTTP verbs
 
 It's common to have a single action do different things depending on the HTTP
@@ -538,53 +540,159 @@ running.
 
 Generates a URL for `name_or_obj`.
 
-If `name_or_obj` is a string, then the route of that name is looked up and
-filled using the values in params.
+> `url_for` is a bit of a misnomer since it typically generates a path to the
+> requested page. If you want to get the entire URL you can combine this
+> function with `build_url`.
 
-For example:
+If `name_or_obj` is a string, then the route of that name is looked up and
+filled using the values in params. If no route exists then an error is thrown.
+
+Given the following routes:
+
 
 ```lua
-app:match("user_data", "/data/:user_id/:data_field", function()
-  return "hi"
+app:match("index", "/", function()
+  -- ...
 end)
 
-app:match("/", function(self)
-  -- returns: /data/123/height
-  self:url_for("user_data", { user_id = 123, data_field = "height"})
+app:match("user_data", "/data/:user_id/:data_field", function()
+  -- ...
 end)
 ```
 
 ```moon
-[user_data: "/data/:user_id/:data_field"]: =>
-  "hi"
-
-"/": =>
-  -- returns: /data/123/height
-  @url_for "user_data", user_id: 123, data_field: "height"
+class App extends lapis.Application
+  [index: "/"]: => -- ..
+  [user_data: "/data/:user_id/:data_field"]: => -- ...
 ```
 
-If `query_params` argument is supplied, then the value will be converted into
-query parameters and appended to the end of the generated path.
+URLs to the pages can be generated like this:
 
+```lua
+-- returns: /
+self:url_for("index")
+
+-- returns: /data/123/height
+self:url_for("user_data", { user_id = 123, data_field = "height"})
+```
+
+```moon
+-- returns: /
+@url_for "index"
+
+-- returns: /data/123/height
+@url_for "user_data", user_id: 123, data_field: "height"
+```
+
+If the third argument, `query_params`, is supplied, it will be converted into
+query parameters and appended to the end of the generated URL. If the route
+doesn't take  any parameters in the URL then `nil`, or empty object, must be
+passed as the second argument:
 
 ```lua
 -- returns: /data/123/height?sort=asc
 self:url_for("user_data", { user_id = 123, data_field = "height"}, { sort = "asc" })
+
+-- returns: /?layout=new
+self:url_for("index", nil, {layout = "new"})
 ```
 
 ```moon
 -- returns: /data/123/height?sort=asc
 @url_for "user_data", { user_id: 123, data_field: "height"}, sort: "asc"
+
+-- returns: /?layout=new
+@url_for "index", nil, layout: "new"
+```
+
+Any optional components of the route will only be included if all of the
+enclosed params are provided. If the optinal component does not have any
+parameters then it will never be included.
+
+Given the following route:
+
+```lua
+app:match("user_page", "/user/:username(/:page)(.:format)", function(self)
+  -- ...
+end)
+```
+
+```moon
+class App extends lapis.Application
+  [user_page: "/user/:username(/:page)(.:format)"]: => -- ...
+```
+
+The following URLs can be generated:
+
+```lua
+-- returns: /user/leafo
+self:url_for("user_page", { username = "leafo" })
+
+-- returns: /user/leafo/projects
+self:url_for("user_page", { username = "leafo", page = "projects" })
+
+-- returns: /user/leafo.json
+self:url_for("user_page", { username = "leafo", format = "json" })
+
+-- returns: /user/leafo/code.json
+self:url_for("user_page", { username = "leafo", page = "code", format = "json" })
+```
+
+```moon
+-- returns: /user/leafo
+@url_for "user_page", username: "leafo"
+
+-- returns: /user/leafo/projects
+@url_for "user_page", username: "leafo", page: "projects"
+
+-- returns: /user/leafo.json
+@url_for "user_page", username: "leafo", format: "json"
+
+-- returns: /user/leafo/code.json
+@url_for "user_page", username: "leafo", page: "code", format: "json"
+```
+
+If a route contains a splat, the value can be provieded via the parameter named
+`splat`:
+
+```lua
+app:match("browse", "/browse(/*)", function(self)
+  -- ...
+end)
+```
+
+```moon
+class App extends lapis.Application
+  [browse: "/browse(/*)"]: => -- ...
+```
+
+```lua
+-- returns: /browse
+self:url_for("browse")
+
+-- returns: /browse/games/recent
+self:url_for("browse", { splat = "games/recent" })
+```
+
+```moon
+-- returns: /browse
+@url_for "browse"
+
+-- returns: /browse/games/recent
+@url_for "browse", splat: "games/recent"
 ```
 
 #### Passing an object to `url_for`
 
-If `name_or_obj` is a table, then the `url_params` method is called on the
-object. The arguments passed to `url_params` are the request, followed by all
-the remaining arguments passed to `url_for`. The result of `url_params` is used
-to call `url_for` again.
+If `name_or_obj` is a table, then the `url_params` method is called on that
+table, and the return values are passed to `url_for`.
 
-For example, consider a `Users` model that defines a `url_params` method:
+The `url_params` method takes as arguments the `request` object, followed by
+anything else passed to `url_for` originally.
+
+It's common to implement `url_params` on models, giving them the ability to
+define what page they represent. For example, consider a `Users` model that
+defines a `url_params` method, which goes to the profile page of the user:
 
 ```lua
 local Users = Model:extend("users", {
