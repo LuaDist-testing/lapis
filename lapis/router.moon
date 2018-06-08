@@ -33,7 +33,6 @@ route_precedence = (flags) ->
 
   p
 
-
 class RouteParser
   new: =>
     @grammar = @build_grammar!
@@ -42,54 +41,91 @@ class RouteParser
   parse: (route) =>
     @grammar\match route
 
-  compile_chunks: (chunks) =>
+  compile_exclude: (current_p, chunks, k=1) =>
+    local out
+    for {kind, value, val_params} in *chunks[k,]
+      switch kind
+        when "literal"
+          if out
+            out += value
+          else
+            out = value
+          break
+        when "optional"
+          p = route_precedence val_params
+          continue if current_p < p
+          if out
+            out += value
+          else
+            out = value
+        else
+          break
+
+    out
+
+  compile_chunks: (chunks, exclude=nil) =>
     local patt
     flags = {}
 
-    for i, {kind, value, val_params} in ipairs chunks
-      following = chunks[i+1]
-      exclude = if following and following[1] == "literal"
-        following[2]
-
+    for i=#chunks,1,-1
+      chunk = chunks[i]
+      {kind, value, val_params} = chunk
       flags[kind] = true
 
-      part = switch kind
+      chunk_pattern = switch kind
         when "splat"
           inside = P 1
           inside -= exclude if exclude
+          exclude = nil
           Cg inside^1, "splat"
         when "var"
           char = val_params and @compile_character_class(val_params) or P 1
+
           inside = char - "/"
           inside -= exclude if exclude
+          exclude = nil
           Cg inside^1, value
         when "literal"
+          exclude = P value
           P value
         when "optional"
-          for k,v in pairs val_params
+          inner, inner_flags, inner_exclude = @compile_chunks value, exclude
+
+          for k,v in pairs inner_flags
             flags[k] or= v
-          value^-1
+
+          if inner_exclude
+            if exclude
+              exclude = inner_exclude + exclude
+            else
+              exclude = inner_exclude
+
+          inner^-1
         else
           error "unknown node: #{kind}"
 
       patt = if patt
-        patt * part
+        chunk_pattern * patt
       else
-        part
+        chunk_pattern
 
-    patt, flags
+    patt, flags, exclude
 
   -- convert character class, like %d to an lpeg pattern
   compile_character_class: (chars) =>
-    @character_class_pattern or= Ct C(
+    @character_class_pattern or= Ct C("^")^-1 * C(
       P"%" * S"adw" +
       (C(1) * P"-" * C(1) / (a, b) -> "#{a}#{b}") +
       1
     )^1
 
+    negate = false
     plain_chars = {}
     patterns = for item in *@character_class_pattern\match chars
       switch item
+        when "^"
+          negate = true
+          continue
         when "%a"
           R "az", "AZ"
         when "%d"
@@ -103,7 +139,6 @@ class RouteParser
             table.insert plain_chars, item
             continue
 
-
     if next plain_chars
       table.insert patterns, S table.concat plain_chars
 
@@ -114,6 +149,9 @@ class RouteParser
       else
         out = p
 
+    if negate
+      out = 1 - out
+
     out or P -1
 
   build_grammar: =>
@@ -123,7 +161,7 @@ class RouteParser
     make_var = (str, char_class) -> { "var", str\sub(2), char_class }
     make_splat = -> { "splat" }
     make_lit = (str) -> { "literal", str }
-    make_optional = (...) -> { "optional", ... }
+    make_optional = (children) -> { "optional", children }
 
     splat = P"*"
     var = P":" * alpha * alpha_num^0
@@ -138,19 +176,19 @@ class RouteParser
 
     compile_chunks = @\compile_chunks
 
-    P {
+    g = P {
       "route"
       optional_literal: (1 - P")" - V"chunk")^1 / make_lit
-      optional_route: Ct((V"chunk" + V"optional_literal")^1) / compile_chunks
+      optional_route: Ct((V"chunk" + V"optional_literal")^1)
       optional: P"(" * V"optional_route" * P")" / make_optional
 
       literal: (1 - V"chunk")^1 / make_lit
       chunk: var / make_var + splat / make_splat + V"optional"
 
-      route: Ct((V"chunk" + V"literal")^1) / compile_chunks / (p, f) ->
-        Ct(p) * -1, f
-
+      route: Ct((V"chunk" + V"literal")^1)
     }
+
+    g / @\compile_chunks / (p, f) -> Ct(p) * -1, f
 
 
 class Router

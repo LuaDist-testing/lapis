@@ -1,175 +1,241 @@
 
 import Router, RouteParser from require "lapis.router"
 
-describe "basic route matching", ->
-  local r
+build_router = (routes) ->
   handler = (...) -> { ... }
-
-  before_each ->
-    r = Router!
-    r\add_route "/hello", handler
-    r\add_route "/hello/:name[%d]", handler
-    r\add_route "/hello/:name", handler
-    r\add_route "/hello/:name/world", handler
-    r\add_route "/static/*", handler
-    r\add_route "/x/:color/:height/*", handler
-    r\add_route "/please/", handler
-
+  with r = Router!
+    for pattern in *routes
+      r\add_route pattern, handler
     r.default_route = -> "failed to find route"
 
-  it "should match static route", ->
-    out = r\resolve "/hello"
-    assert.same { {}, "/hello" }, out
 
-  it "should match character class route", ->
-    out = r\resolve "/hello/234"
-    assert.same { { name: "234" }, "/hello/:name[%d]" }, out
+describe "parsing spec", ->
+  for {pattern, test, result} in *{
+    {"/:yeah", "ddd", nil}
+    {"/:yeah", "/okay", {yeah: "okay"}}
+    {"/:yeah", "/okay.com", {yeah: "okay.com"}}
 
-  it "should match param route", ->
-    out = r\resolve "/hello/world2323"
-    assert.same {
-      { name: "world2323" },
-      "/hello/:name"
-    }, out
+    -- exclude var
+    {":thing-:hello", "a-b", {thing: "a", hello: "b"}}
 
-  it "should match param route", ->
-    out = r\resolve "/hello/the-parameter/world"
-    assert.same {
-      { name: "the-parameter" },
-      "/hello/:name/world"
-    }, out
+    {":thing(-:hello)", {
+      {"a-b", {thing: "a", hello: "b"}}
+      {"az", {thing: "az"}}
+      {"i/fail", nil}
+    }}
 
-  it "should match splat", ->
-    out = r\resolve "/static/hello/world/343434/foo%20bar.png"
-    assert.same {
-      { splat: 'hello/world/343434/foo%20bar.png' }
-      "/static/*"
-    }, out
+    -- exclude splat
+    {"/hi/*-:hello", "/hi/a/b/c-okay", {splat: "a/b/c", hello: "okay"}}
+    {"*/hello", "whoa/zone/hello", {splat: "whoa/zone"}}
+    {":one.*", "sure-thing.com", {splat: "com", one: "sure-thing"}}
 
-  it "should match all", ->
-    out = r\resolve "/x/greenthing/123px/ahhhhwwwhwhh.txt"
-    assert.same {
-      {
-        splat: 'ahhhhwwwhwhh.txt'
-        height: '123px'
-        color: 'greenthing'
+    -- splat with optional exclude from format
+    {"/browse/*(.:format)", {
+      {"/browse/things", {splat: "things"}}
+      {"/browse/things.zip", {splat: "things", format: "zip"}}
+      {"/browse/things.tar.gz", {splat: "things", format: "tar.gz"}}
+    }}
+
+    -- splat doesn't cancel out var
+    {":one(*)", "hello_world", { one: "hello_world"}}
+
+    {"/zone(/:game(/:user))", "/zone/drone/leafo",
+      { game: "drone", user: "leafo"}}
+
+    {"/:game(/:user)(*)", "/drone/leafo/hi",
+      { game: "drone", user: "leafo", splat: "/hi" }}
+
+    -- many optional
+    {"/zone(/:game(/:user)(*))",  {
+      {"/zone", {}}
+      {"/zone/leafo", { game: "leafo"}}
+      {"/zone/leafo/beefo", { game: "leafo", user: "beefo"}}
+      {"/zone/drone/leafo/here", { game: "drone", user: "leafo", splat: "/here" }}
+    }}
+
+    -- many optional with format
+    {"/zone(/:game(/:user)(*))(.:format)",  {
+      -- same as above, nothing changed
+      {"/zone", {}}
+      {"/zone/leafo", { game: "leafo"}}
+      {"/zone/leafo/beefo", { game: "leafo", user: "beefo"}}
+      {"/zone/drone/leafo/here", { game: "drone", user: "leafo", splat: "/here" }}
+
+      -- with formats
+      {"/zone.zip", { format: "zip"}}
+      {"/zone/leafo.jpeg", { game: "leafo", format: "jpeg"}}
+      {"/zone/leafo/beefo.moon", { game: "leafo", user: "beefo", format: "moon"}}
+      {"/zone/drone/leafo/here.leaf", {
+        game: "drone"
+        user: "leafo"
+        splat: "/here"
+        format: "leaf"
+      }}
+    }}
+
+    -- adjacent optionals
+    {"/manifest(-:version)(.:format)", {
+      {"/manifest", {}}
+      {"/manifest-first.json", { version: "first", format: "json"}}
+      {"/manifest.json", { format: "json"}}
+      {"/manifest-first", { version: "first" }}
+    }}
+
+    -- moonrocks workaround
+    -- TODO: make (-:version)(.:format) work for -5.1.zip
+    {"/manifest(-:a.:b)(.:format)", {
+      {"/manifest-5.1.json", { a: "5", b: "1", format: "json" }}
+      {"/manifest-5.1", { a: "5", b: "1" }}
+      {"/manifest.json", { format: "json" }}
+    }}
+
+    -- character classes
+    {"/:hello[%d]", {
+      {"/what", nil}
+      {"/", nil}
+      {"/1223", { hello: "1223"}}
+      {"/1", { hello: "1"}}
+    }}
+
+    {"/:world[%a]", {
+      {"/what", { world: "what"}}
+      {"/1223", nil}
+      {"/1"}
+    }}
+
+    {"/:lee[%w]", {
+      {"/what", {lee: "what"}}
+      {"/999", {lee: "999"}}
+      {"/aj23", {lee: "aj23"}}
+      {"/2lll__", nil}
+      {"/", nil}
+    }}
+
+    {"/:ben[a-f]", {
+      {"/what", nil}
+      {"/abf", {ben: "abf"}}
+    }}
+
+    {"/:andy[12fg]", {
+      {"/what", nil}
+      {"/12", {andy: "12"}}
+      {"/f2", {andy: "f2"}}
+    }}
+
+    {"/:dap[a%dd-g]", {
+      {"/what", nil}
+      {"/a3", {dap: "a3"}}
+      {"/9a99f", {dap: "9a99f"}}
+    }}
+
+    {"/:nope[^.]", {
+      {"/good", {nope: "good"}}
+      {"/", nil}
+      {"/one.two", nil}
+    }}
+
+  }
+    do_test = (pattern, test, result) ->
+      it "matches `#{pattern}` with `#{test}`", ->
+        parser = RouteParser!
+        p = assert parser\parse pattern
+        assert.same result, (p\match test)
+
+    if type(test) == "table"
+      for {_test, result} in *test
+        do_test pattern, _test, result
+    else
+      do_test pattern, test, result
+
+describe "with router", ->
+  local r
+
+  describe "basic router", ->
+    before_each ->
+      r = build_router {
+        "/hello"
+        "/hello/:name[%d]"
+        "/hello/:name"
+        "/hello/:name/world"
+        "/static/*"
+        "/x/:color/:height/*"
+        "/please/"
       }
-      "/x/:color/:height/*"
-    }, out
 
-  it "should match nothing", ->
-    assert.same "failed to find route", r\resolve("/what-the-heck")
+    it "should match static route", ->
+      out = r\resolve "/hello"
+      assert.same { {}, "/hello" }, out
 
-  it "should match nothing", ->
-    assert.same "failed to find route", r\resolve("/hello//world")
+    it "should match character class route", ->
+      out = r\resolve "/hello/234"
+      assert.same { { name: "234" }, "/hello/:name[%d]" }, out
 
-  it "should match trailing exactly", ->
-    assert.same {
-      {}
-      "/please/"
-    }, r\resolve("/please/")
+    it "should match param route", ->
+      out = r\resolve "/hello/world2323"
+      assert.same {
+        { name: "world2323" },
+        "/hello/:name"
+      }, out
 
-    assert.same "failed to find route", r\resolve("/please")
+    it "should match param route", ->
+      out = r\resolve "/hello/the-parameter/world"
+      assert.same {
+        { name: "the-parameter" },
+        "/hello/:name/world"
+      }, out
+
+    it "should match splat", ->
+      out = r\resolve "/static/hello/world/343434/foo%20bar.png"
+      assert.same {
+        { splat: 'hello/world/343434/foo%20bar.png' }
+        "/static/*"
+      }, out
+
+    it "should match all", ->
+      out = r\resolve "/x/greenthing/123px/ahhhhwwwhwhh.txt"
+      assert.same {
+        {
+          splat: 'ahhhhwwwhwhh.txt'
+          height: '123px'
+          color: 'greenthing'
+        }
+        "/x/:color/:height/*"
+      }, out
+
+    it "should match nothing", ->
+      assert.same "failed to find route", r\resolve("/what-the-heck")
+
+    it "should match nothing", ->
+      assert.same "failed to find route", r\resolve("/hello//world")
+
+    it "should match trailing exactly", ->
+      assert.same {
+        {}
+        "/please/"
+      }, r\resolve("/please/")
+
+      assert.same "failed to find route", r\resolve("/please")
 
   it "should match the catchall", ->
-    r = Router!
-    r\add_route "*", handler
+    r = build_router {"*"}
+
     assert.same {
       { splat: "hello_world" }
       "*"
     }, r\resolve "hello_world"
 
-  it "should match splat with trailing literal", ->
-    router = Router!
-    router\add_route "/*/hello"
-    router\build!
-
-    assert.same {
-      {
-        splat: "one/two"
-      }
-      nil
-      "/*/hello"
-    }, {router.p\match "/one/two/hello"}
-
-
-  it "should match var with trailing literal", ->
-    router = Router!
-    router\add_route "/hi/:one-:two"
-    router\build!
-
-    assert.same {
-      {
-        one: "blah"
-        two: "blorgbeef-fe"
-      }
-      nil
-      "/hi/:one-:two"
-    }, {router.p\match "/hi/blah-blorgbeef-fe"}
-
-describe "character classes", ->
-  local r, g
-  before_each ->
-    r = RouteParser!
-    g = r\build_grammar!
-
-  it "it matches %d", ->
-    p = g\match("/:hello[%d]") * -1
-
-    assert.same nil, (p\match "/what")
-    assert.same nil, (p\match "/")
-    assert.same { hello: "1223"}, (p\match "/1223")
-    assert.same { hello: "1"}, (p\match "/1")
-
-  it "it matches %a", ->
-    p = g\match("/:world[%a]") * -1
-
-    assert.same { world: "what" }, (p\match "/what")
-    assert.same nil, (p\match "/1223")
-    assert.same nil, (p\match "/1")
-
-  it "it matches %w", ->
-    p = g\match("/:lee[%w]") * -1
-
-    assert.same { lee: "what" }, (p\match "/what")
-    assert.same { lee: "999" }, (p\match "/999")
-    assert.same { lee: "aj23" }, (p\match "/aj23")
-
-    assert.same nil, (p\match "/2lll__")
-    assert.same nil, (p\match "/")
-
-  it "it matches range", ->
-    p = g\match("/:ben[a-f]") * -1
-    assert.same nil, (p\match "/what")
-    assert.same { ben: "abf" }, (p\match "/abf")
-
-  it "it matches literal characters", ->
-    p = g\match("/:andy[12fg]") * -1
-    assert.same nil, (p\match "/what")
-    assert.same { andy: "12" }, (p\match "/12")
-    assert.same { andy: "f2" }, (p\match "/f2")
-
-
-  it "it matches combination characters", ->
-    p = g\match("/:dap[a%dd-g]") * -1
-    assert.same nil, (p\match "/what")
-    assert.same { dap: "a3" }, (p\match "/a3")
-    assert.same { dap: "9a99f" }, (p\match "/9a99f")
-
 
 describe "named routes", ->
   local r
-  handler = (...) -> { ... }
 
   before_each ->
-    r = Router!
-    r\add_route { homepage: "/home" }, handler
-    r\add_route { profile: "/profile/:name" }, handler
-    r\add_route { profile_settings: "/profile/:name/settings" }, handler
-    r\add_route { game: "/game/:user_slug/:game_slug" }, handler
-    r\add_route { splatted: "/page/:slug/*" }, handler
-
-    r.default_route = -> "failed to find route"
+    r = build_router {
+      { homepage: "/home" }
+      { profile: "/profile/:name" }
+      { profile_settings: "/profile/:name/settings" }
+      { game: "/game/:user_slug/:game_slug" }
+      { splatted: "/page/:slug/*" }
+    }
 
   it "should match", ->
     out = r\resolve "/home"
@@ -222,63 +288,40 @@ describe "named routes", ->
 
 describe "optional parts", ->
   local r
-  handler = (...) -> { ... }
 
-  before_each ->
-    r = Router!
-    r\add_route "/test(/:game)", handler
-    r\add_route "/zone(/:game(/:user)(*))", handler
-    r\add_route "/test/me", handler
+  describe "basic router", ->
+    before_each ->
+      r = build_router {
+        "/test(/:game)"
+        "/zone(/:game(/:user)(*))"
+        "/test/me"
+      }
 
-    r.default_route = -> "failed to find route"
+    it "matches without optional", ->
+      out = r\resolve "/test/yeah"
+      assert.same { {game: "yeah"}, "/test(/:game)" }, out
 
-  it "matches without optional", ->
-    out = r\resolve "/test/yeah"
-    assert.same { {game: "yeah"}, "/test(/:game)" }, out
+    it "matches with optional part", ->
+      out = r\resolve "/test/ozone"
+      assert.same { {game: "ozone"}, "/test(/:game)" }, out
 
-  it "matches with optional part", ->
-    out = r\resolve "/test/ozone"
-    assert.same { {game: "ozone"}, "/test(/:game)" }, out
+    it "fails to find", ->
+      out = r\resolve "/test/ozone/"
+      assert.same "failed to find route", out
 
-  it "fails to find", ->
-    out = r\resolve "/test/ozone/"
-    assert.same "failed to find route", out
-
-  it "lets literal route take precedence", ->
-    out = r\resolve "/test/me"
-    assert.same { {}, "/test/me" }, out
-
-  it "matches without any optionals", ->
-    out = r\resolve "/zone"
-    assert.same { {}, "/zone(/:game(/:user)(*))" }, out
-
-  it "matches with one optional", ->
-    out = r\resolve "/zone/drone"
-    assert.same { { game: "drone"}, "/zone(/:game(/:user)(*))" }, out
-
-  it "matches with two optional", ->
-    out = r\resolve "/zone/drone/leafo"
-    assert.same { { game: "drone", user: "leafo" }, "/zone(/:game(/:user)(*))" }, out
-
-  it "matches with three optional", ->
-    out = r\resolve "/zone/drone/leafo/here"
-    assert.same {
-      { game: "drone", user: "leafo", splat: "/here" }
-      "/zone(/:game(/:user)(*))"
-    }, out
-
+    it "lets literal route take precedence", ->
+      out = r\resolve "/test/me"
+      assert.same { {}, "/test/me" }, out
 
 describe "route precedence", ->
   local r
-  handler = (...) -> { ... }
 
   before_each ->
-    r = Router!
-    r\add_route "/*", handler
-    r\add_route "/:slug", handler
-    r\add_route "/hello", handler
-
-    r.default_route = -> "failed to find route"
+    r = build_router {
+      "/*"
+      "/:slug"
+      "/hello"
+    }
 
   it "matches literal route first", ->
     out = r\resolve "/hello"
@@ -293,31 +336,35 @@ describe "route precedence", ->
     assert.same { { splat: "whoa/zone" }, "/*" }, out
 
   it "preserves declare order among routes with same precedence", ->
-    r = Router!
-    r\add_route "/*", handler
-
-    for i=1,20
-      r\add_route "/:slug#{i}", handler
-
-    r\add_route "/hello", handler
+    r = build_router {
+      "/*"
+      "/:slug1"
+      "/:slug2"
+      "/:slug3"
+      "/:slug4"
+      "/:slug5"
+      "/hello"
+    }
 
     out = r\resolve "/hey"
     assert.same { { slug1: "hey" }, "/:slug1" }, out
 
   it "more specific takes precedence", ->
     pending "todo"
-    r = Router!
-    r\add_route "/test/:game", handler
-    r\add_route "/test/:game-world", handler
+    r = build_router {
+      "/test/:game"
+      "/test/:game-world"
+    }
 
     out = r\resolve "/test/hello-world"
     assert.same { { game: "hello" }, "/test/:game-world" }, out
 
   it "non-optional takes precedence", ->
     pending "todo"
-    r = Router!
-    r\add_route "/test(/:game)", handler
-    r\add_route "/test/:game", handler
+    r = build_router {
+      "/test(/:game)"
+      "/test/:game"
+    }
 
     out = r\resolve "/test/thing"
     assert.same { { game: "thing" }, "/test/:game" }, out
