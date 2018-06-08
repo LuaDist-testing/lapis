@@ -36,7 +36,7 @@ Converts a key,value table into a query string
 
 ### `underscore(str)`
 
-Converst CamelCase to camel_case.
+Convert CamelCase to camel_case.
 
 ### `slugify(str)`
 
@@ -267,7 +267,7 @@ local csrf = require("lapis.csrf")
 csrf = require "lapis.csrf"
 ```
 
-###  `generate_token(req, key=nil, expires=os.time! + 28800)`
+###  `generate_token(req, key=nil, expires=os.time() + 28800)`
 
 Generates a new CSRF token using the session secret. `key` is an optional piece
 of data you can associate with the request. The token will expire in 8 hours by
@@ -341,7 +341,7 @@ app:get("/", function(self)
   -- a post request, data table is form encoded and content-type is set to
   -- application/x-www-form-urlencoded
   http.simple("http://leafo.net/", {
-    name: "leafo"
+    name = "leafo"
   })
 
   -- manual invocation of the above request
@@ -349,9 +349,9 @@ app:get("/", function(self)
     url = "http://leafo.net",
     method = "POST",
     headers = {
-      "content-type" = "application/x-www-form-urlencoded"
+      ["content-type"] = "application/x-www-form-urlencoded"
     },
-    body: {
+    body = {
       name = "leafo"
     }
   })
@@ -531,7 +531,7 @@ cache.delete { "/hello", { thing: "world" } }
 
 ### `delete_all([dict_name="page_cache"])`
 
-Deletes all entires from the cache.
+Deletes all entries from the cache.
 
 ### `delete_path(path, [dict_name="page_cache"])`
 

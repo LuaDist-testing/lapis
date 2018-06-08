@@ -110,7 +110,6 @@ add_relations = function(self, relations)
       local source = relation.has_one
       if source then
         assert(type(source) == "string", "Expecting model name for `has_one` relation")
-        local column_name = tostring(name) .. "_id"
         self.__base[fn_name] = function(self)
           local existing = self[name]
           if existing ~= nil then
@@ -118,7 +117,7 @@ add_relations = function(self, relations)
           end
           local model = assert_model(source)
           local clause = {
-            [relation.key or tostring(singularize(self.__class:table_name())) .. "_id"] = self[self.__class:primary_keys()]
+            [relation.key or tostring(self.__class:singular_name()) .. "_id"] = self[self.__class:primary_keys()]
           }
           do
             local obj = model:find(clause)
@@ -134,6 +133,9 @@ add_relations = function(self, relations)
         assert(type(source) == "string", "Expecting model name for `belongs_to` relation")
         local column_name = tostring(name) .. "_id"
         self.__base[fn_name] = function(self)
+          if not (self[column_name]) then
+            return nil
+          end
           local existing = self[name]
           if existing ~= nil then
             return existing
@@ -155,7 +157,7 @@ add_relations = function(self, relations)
           self.__base[fn_name] = function(self, opts)
             local model = assert_model(source)
             local clause = {
-              [foreign_key or tostring(singularize(self.__class:table_name())) .. "_id"] = self[self.__class:primary_keys()]
+              [foreign_key or tostring(self.__class:singular_name()) .. "_id"] = self[self.__class:primary_keys()]
             }
             do
               local where = relation.where
@@ -208,7 +210,8 @@ do
       end)(), "-")
     end,
     delete = function(self)
-      return db.delete(self.__class:table_name(), self:_primary_cond())
+      local res = db.delete(self.__class:table_name(), self:_primary_cond())
+      return res.affected_rows and res.affected_rows > 0, res
     end,
     update = function(self, first, ...)
       local cond = self:_primary_cond()
@@ -385,6 +388,9 @@ do
     end
     return name
   end
+  self.singular_name = function(self)
+    return singularize(self:table_name())
+  end
   self.columns = function(self)
     local columns = db.query([[      select column_name, data_type
       from information_schema.columns
@@ -514,7 +520,7 @@ do
           if opts and opts.as then
             field_name = opts.as
           elseif flip then
-            field_name = singularize(self:table_name())
+            field_name = self:singular_name()
           else
             field_name = foreign_key:match("^(.*)_" .. tostring(escape_pattern(self.primary_key)) .. "$")
           end
@@ -533,10 +539,12 @@ do
       by_key = self.primary_key
     end
     local where = nil
+    local clause = nil
     local fields = "*"
     if type(by_key) == "table" then
       fields = by_key.fields or fields
       where = by_key.where
+      clause = by_key.clause
       by_key = by_key.key or self.primary_key
     end
     if type(by_key) == "table" and by_key[1] ~= "raw" then
@@ -560,6 +568,13 @@ do
     local query = fields .. " from " .. tostring(tbl_name) .. " where " .. tostring(primary) .. " in (" .. tostring(flat_ids) .. ")"
     if where then
       query = query .. (" and " .. db.encode_clause(where))
+    end
+    if clause then
+      if type(clause) == "table" then
+        assert(clause[1], "invalid clause")
+        clause = db.interpolate_query(unpack(clause))
+      end
+      query = query .. (" " .. clause)
     end
     do
       local res = db.select(query)

@@ -1,5 +1,5 @@
 
-db = require "lapis.nginx.postgres"
+db = require "lapis.db.postgres"
 import Model from require "lapis.db.model"
 import with_query_fn, assert_queries from require "spec.helpers"
 
@@ -77,6 +77,26 @@ describe "lapis.db.model", ->
       }
     }
 
+    Things\find_all { 1,2,4 }, {
+      fields: "hello, world"
+      key: "dad"
+      where: {
+        color: "blue"
+      }
+      clause: {
+        "order by id limit ?", 1234
+      }
+    }
+
+    Things\find_all { 1,2,4 }, {
+      fields: "hello, world"
+      key: "dad"
+      where: {
+        color: "blue"
+      }
+      clause: "group by color"
+    }
+
     class Things2 extends Model
       @primary_key: {"hello", "world"}
 
@@ -97,6 +117,8 @@ describe "lapis.db.model", ->
         [[SELECT hello, world from "things" where "dad" in (1, 2, 4) and "height" = '10px' AND "color" = 'blue']]
         [[SELECT hello, world from "things" where "dad" in (1, 2, 4) and "color" = 'blue' AND "height" = '10px']]
       }
+      [[SELECT hello, world from "things" where "dad" in (1, 2, 4) and "color" = 'blue' order by id limit 1234]]
+      [[SELECT hello, world from "things" where "dad" in (1, 2, 4) and "color" = 'blue' group by color]]
       {
         [[SELECT * from "things" where "world" = 2 AND "hello" = 1 limit 1]]
         [[SELECT * from "things" where "hello" = 1 AND "world" = 2 limit 1]]
@@ -197,8 +219,8 @@ describe "lapis.db.model", ->
       'SELECT * from "things" where "id" > 100 and (color = blue) order by "id" ASC, "updated_at" ASC limit 10'
       'SELECT * from "things" where "id" < 32 and (color = blue) order by "id" DESC, "updated_at" DESC limit 10'
 
-      'SELECT * from "things" where "id" > 100 and "updated_at" > 200 and (color = blue) order by "id" ASC, "updated_at" ASC limit 10'
-      'SELECT * from "things" where "id" < 32 and "updated_at" < 42 and (color = blue) order by "id" DESC, "updated_at" DESC limit 10'
+      'SELECT * from "things" where "id" >= 100 and "updated_at" > 200 and (color = blue) order by "id" ASC, "updated_at" ASC limit 10'
+      'SELECT * from "things" where "id" <= 32 and "updated_at" < 42 and (color = blue) order by "id" DESC, "updated_at" DESC limit 10'
     }, queries
 
 
@@ -241,7 +263,7 @@ describe "lapis.db.model", ->
       }
     }, queries
 
-  it "should create model with options #ddd", ->
+  it "should create model with options", ->
     query_mock['INSERT'] = { { id: 101 } }
 
     class TimedThings extends Model
@@ -465,7 +487,7 @@ describe "lapis.db.model", ->
       }, queries
 
 
-  describe "relations #xxx", ->
+  describe "relations", ->
     local models
 
     before_each ->
@@ -601,6 +623,20 @@ describe "lapis.db.model", ->
         }
         'SELECT * from "posts" where "user_id" = 1234 limit 44 offset 88 '
       }, queries
+
+    it "should create relations for inheritance #ddd", ->
+      class Base extends Model
+        @relations: {
+          {"user", belongs_to: "Users"}
+        }
+
+      class Child extends Base
+        @relations: {
+          {"category", belongs_to: "Categories"}
+        }
+
+      assert Child.get_user, "expecting get_user"
+      assert Child.get_category, "expecting get_category"
 
   describe "enum", ->
     import enum from require "lapis.db.model"

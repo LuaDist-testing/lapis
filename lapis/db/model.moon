@@ -66,14 +66,13 @@ add_relations = (relations) =>
 
     if source = relation.has_one
       assert type(source) == "string", "Expecting model name for `has_one` relation"
-      column_name = "#{name}_id"
       @__base[fn_name] = =>
         existing = @[name]
         return existing if existing != nil
         model = assert_model source
 
         clause = {
-          [relation.key or "#{singularize @@table_name!}_id"]: @[@@primary_keys!]
+          [relation.key or "#{@@singular_name!}_id"]: @[@@primary_keys!]
         }
 
         with obj = model\find clause
@@ -85,6 +84,7 @@ add_relations = (relations) =>
       column_name = "#{name}_id"
 
       @__base[fn_name] = =>
+        return nil unless @[column_name]
         existing = @[name]
         return existing if existing != nil
         model = assert_model source
@@ -97,7 +97,7 @@ add_relations = (relations) =>
         @__base[fn_name] = (opts) =>
           model = assert_model source
           clause = {
-            [foreign_key or "#{singularize @@table_name!}_id"]: @[@@primary_keys!]
+            [foreign_key or "#{@@singular_name!}_id"]: @[@@primary_keys!]
           }
 
           if where = relation.where
@@ -134,6 +134,11 @@ class Model
     name = underscore @__name
     @table_name = -> name
     name
+
+  -- used as the forign key name when preloading objects over a relation
+  -- user_posts -> user_post
+  @singular_name: =>
+    singularize @table_name!
 
   @columns: =>
     columns = db.query [[
@@ -244,7 +249,7 @@ class Model
         field_name = if opts and opts.as
           opts.as
         elseif flip
-          singularize @table_name!
+          @singular_name!
         else
           foreign_key\match "^(.*)_#{escape_pattern(@primary_key)}$"
 
@@ -257,13 +262,14 @@ class Model
 
   @find_all: (ids, by_key=@primary_key) =>
     where = nil
+    clause = nil
     fields = "*"
 
     -- parse opts
-
     if type(by_key) == "table"
       fields = by_key.fields or fields
       where = by_key.where
+      clause = by_key.clause
       by_key = by_key.key or @primary_key
 
     if type(by_key) == "table" and by_key[1] != "raw"
@@ -278,6 +284,13 @@ class Model
 
     if where
       query ..= " and " .. db.encode_clause where
+
+    if clause
+      if type(clause) == "table"
+        assert clause[1], "invalid clause"
+        clause = db.interpolate_query unpack clause
+
+      query ..= " " .. clause
 
     if res = db.select query
       @load r for r in *res
@@ -374,7 +387,8 @@ class Model
   url_key: => concat [@[key] for key in *{@@primary_keys!}], "-"
 
   delete: =>
-    db.delete @@table_name!, @_primary_cond!
+    res =  db.delete @@table_name!, @_primary_cond!
+    res.affected_rows and res.affected_rows > 0, res
 
   -- thing\update "col1", "col2", "col3"
   -- thing\update {

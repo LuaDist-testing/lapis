@@ -12,6 +12,7 @@ describe "basic route matching", ->
     r\add_route "/hello/:name/world", handler
     r\add_route "/static/*", handler
     r\add_route "/x/:color/:height/*", handler
+    r\add_route "/please/", handler
 
     r.default_route = -> "failed to find route"
 
@@ -57,6 +58,14 @@ describe "basic route matching", ->
   it "should match nothing", ->
     assert.same "failed to find route", r\resolve("/hello//world")
 
+  it "should match trailing exactly", ->
+    assert.same {
+      {}
+      "/please/"
+    }, r\resolve("/please/")
+
+    assert.same "failed to find route", r\resolve("/please")
+
   it "should match the catchall", ->
     r = Router!
     r\add_route "*", handler
@@ -64,6 +73,7 @@ describe "basic route matching", ->
       { splat: "hello_world" }
       "*"
     }, r\resolve "hello_world"
+
 
 describe "named routes", ->
   local r
@@ -102,6 +112,14 @@ describe "named routes", ->
     url = r\url_for "splatted", slug: "cool", splat: "hello"
     assert.same "/page/cool/*", url
 
+  it "should generate url with query string as table", ->
+    url = r\url_for "profile", { name: "adam" }, hello: "world"
+    assert.same "/profile/adam?hello=world", url
+
+  it "should generate url with query string as value", ->
+    url = r\url_for "profile", { name: "adam" }, "required"
+    assert.same "/profile/adam?required", url
+
   it "should create param from object", ->
     user = {
       url_key: (route_name, param_name) =>
@@ -116,4 +134,3 @@ describe "named routes", ->
   it "should not build url", ->
     assert.has_error (-> r\url_for "fake_url", name: user),
       "Missing route named fake_url"
-

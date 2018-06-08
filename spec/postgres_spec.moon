@@ -1,13 +1,12 @@
+require "spec.helpers" -- for one_of
 
-import with_query_fn from require "spec.helpers"
-
-db = require "lapis.nginx.postgres"
-schema = require "lapis.db.schema"
+db = require "lapis.db.postgres"
+schema = require "lapis.db.postgres.schema"
 
 value_table = { hello: "world", age: 34 }
 
 tests = {
-  -- lapis.nginx.postgres
+  -- lapis.db.postgres
   {
     -> db.escape_identifier "dad"
     '"dad"'
@@ -58,8 +57,6 @@ tests = {
     -> db.encode_clause thing: db.NULL
     [["thing" IS NULL]]
   }
-
-
 
   {
     -> db.interpolate_query "update x set x = ?", db.raw"y + 1"
@@ -144,7 +141,7 @@ tests = {
   }
 
 
-  -- lapis.db.schema
+  -- lapis.db.postgres.schema
 
   {
     -> schema.add_column "hello", "dads", schema.types.integer
@@ -357,7 +354,7 @@ END]]
 
 
 local old_query_fn
-describe "lapis.nginx.postgres", ->
+describe "lapis.db.postgres", ->
   setup ->
     old_query_fn = db.set_backend "raw", (q) -> q
 
