@@ -421,6 +421,35 @@ SELECT * from another table where id in (3, 2, 1, 5)
 UPDATE "the_table" SET "height" = 55 WHERE "ids" IN (3, 2, 1, 5)
 ```
 
+### `array({values...})`
+
+Converts the argument passed to an array type that will be inserted/updated
+using PostgreSQL's array syntax. This function does not exist for MySQL.
+
+The return value of this function can be used in place of any regular value
+passed to a SQL query function. Each item in the list will be escaped with
+`escape_literal` before being inserted into the query.
+
+The argument is converted, not copied. If you need to avoid modifying the
+argument then create a copy before passing it to this function.
+
+
+```lua
+db.insert("some_table", {
+  tags = db.array({"hello", "world"})
+})
+```
+
+```moon
+db.insert "some_table", {
+  tags: db.array {"hello", "world"}
+}
+```
+
+```sql
+INSERT INTO "some_table" ("tags") VALUES (ARRAY['hello','world'])
+```
+
 ### `escape_literal(value)`
 
 Escapes a value for use in a query. A value is any type that can be stored in a
@@ -783,6 +812,7 @@ options. The options include:
 * `null: boolean` -- determines if the column is `NOT NULL`
 * `unique: boolean` -- determines if the column has a unique index
 * `primary_key: boolean` -- determines if the column is the primary key
+* `array: bool|number` -- makes the type an array (PostgreSQL Only), pass number to set how many dimensions the array is, `true` == `1`
 
 Here are some examples:
 
@@ -791,6 +821,7 @@ types.integer({ default = 1, null = true })  --> integer DEFAULT 1
 types.integer({ primary_key = true })        --> integer NOT NULL DEFAULT 0 PRIMARY KEY
 types.text({ null = true })                  --> text
 types.varchar({ primary_key = true })        --> character varying(255) NOT NULL PRIMARY KEY
+types.real({ array = true })                 --> real[]
 ```
 
 ```moon
@@ -798,6 +829,8 @@ types.integer default: 1, null: true  --> integer DEFAULT 1
 types.integer primary_key: true       --> integer NOT NULL DEFAULT 0 PRIMARY KEY
 types.text null: true                 --> text
 types.varchar primary_key: true       --> character varying(255) NOT NULL PRIMARY KEY
+types.real array: true                --> real[]
+types.text array: 2                   --> real[][]
 ```
 
 > MySQL has a complete different type set than PostgreSQL, see [MySQL

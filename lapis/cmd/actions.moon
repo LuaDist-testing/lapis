@@ -6,35 +6,16 @@ import find_leda, start_leda from require "lapis.cmd.leda"
 path = require "lapis.cmd.path"
 colors = require "ansicolors"
 
-log = print
-annotate = (obj, verbs) ->
-  setmetatable {}, {
-    __newindex: (name, value) =>
-      obj[name] = value
-    __index: (name) =>
-      fn =  obj[name]
-      return fn if not type(fn) == "function"
-      if verbs[name]
-        (...) ->
-          fn ...
-          first = ...
-          log verbs[name], first
-      else
-        fn
-  }
-
-path = annotate path, {
-  mkdir: colors "%{bright}%{magenta}made directory%{reset}"
-  write_file: colors "%{bright}%{yellow}wrote%{reset}"
-}
+path = path\annotate!
 
 write_file_safe = (file, content) ->
-  return if path.exists file
+  return nil, "file already exists: #{file}" if path.exists file
 
   if prefix = file\match "^(.+)/[^/]+$"
     path.mkdir prefix unless path.exists prefix
 
   path.write_file file, content
+  true
 
 fail_with_message = (msg) ->
   print colors "%{bright}%{red}Aborting:%{reset} " .. msg
@@ -209,18 +190,36 @@ tasks = {
 
   {
     name: "generate"
-    usage: "generate template [args...]"
+    usage: "generate <template> [args...]"
     help: "generates a new file from template"
 
     (template_name, ...) ->
-      tpl = require "lapis.cmd.templates.#{template_name}"
-      unless type(tpl) == "table"
-        error "invalid template: #{template_name}"
+      local tpl, module_name
 
-      tpl.check_args ...
-      out = tpl.content ...
-      fname = tpl.filename ...
-      write_file_safe fname, out
+      pcall ->
+        module_name = "generators.#{template_name}"
+        tpl = require module_name
+
+      unless tpl
+        tpl = require "lapis.cmd.templates.#{template_name}"
+
+      unless type(tpl) == "table"
+        error "invalid generator `#{module_name or template_name}`, module must be table"
+
+      writer = {
+        write: (...) => assert write_file_safe ...
+        mod_to_path: (mod) =>
+          mod\gsub "%.", "/"
+
+      }
+
+      if tpl.check_args
+        tpl.check_args ...
+
+      unless type(tpl.write) == "function"
+        error "generator `#{module_name or template_name}` is missing write function"
+
+      tpl.write writer, ...
   }
 
   {

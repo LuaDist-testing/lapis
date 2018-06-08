@@ -150,6 +150,7 @@ describe "lapis.db.model", ->
     p\get_all!
     assert.same 127, p\total_items!
     assert.same 13, p\num_pages!
+    assert.falsy p\has_items!
 
     p\get_page 1
     p\get_page 4
@@ -175,16 +176,17 @@ describe "lapis.db.model", ->
 
     assert_queries {
       'SELECT * from "things" where group_id = 123 order by name asc'
-      'SELECT COUNT(*) as c from "things" where group_id = 123 '
-      'SELECT * from "things" where group_id = 123 order by name asc limit 10 offset 0 '
-      'SELECT * from "things" where group_id = 123 order by name asc limit 10 offset 30 '
-      'SELECT * from "things" order by name asc limit 25 offset 50 '
-      'SELECT hello, world from "things" limit 12 offset 12 '
-      'SELECT hello, world from "things" limit 12 offset 12 '
-      'SELECT * from "things" order by BLAH limit 10 offset 0 '
-      'SELECT * from "things" order by BLAH limit 10 offset 10 '
-      'SELECT COUNT(*) as c from "things" join whales on color = blue '
-      'SELECT * from "things" join whales on color = blue order by BLAH limit 10 offset 10 '
+      'SELECT COUNT(*) AS c FROM "things" where group_id = 123 '
+      'SELECT 1 FROM "things" where group_id = 123 limit 1'
+      'SELECT * from "things" where group_id = 123 order by name asc LIMIT 10 OFFSET 0'
+      'SELECT * from "things" where group_id = 123 order by name asc LIMIT 10 OFFSET 30'
+      'SELECT * from "things" order by name asc LIMIT 25 OFFSET 50'
+      'SELECT hello, world from "things" LIMIT 12 OFFSET 12'
+      'SELECT hello, world from "things" LIMIT 12 OFFSET 12'
+      'SELECT * from "things" order by BLAH LIMIT 10 OFFSET 0'
+      'SELECT * from "things" order by BLAH LIMIT 10 OFFSET 10'
+      'SELECT COUNT(*) AS c FROM "things" join whales on color = blue '
+      'SELECT * from "things" join whales on color = blue order by BLAH LIMIT 10 OFFSET 10'
     }, queries
 
 
@@ -500,6 +502,18 @@ describe "lapis.db.model", ->
         [[UPDATE "things" SET "name" = 'changed from update' WHERE "id" = 101]]
       }, queries
 
+  describe "inheritance", ->
+    it "returns correct cached table name", ->
+      class FirstModel extends Model
+      class SecondModel extends FirstModel
+      assert.same "first_model", FirstModel\table_name!
+      assert.same "second_model", SecondModel\table_name!
+
+    it "returns correct cached table name when flipped", ->
+      class FirstModel extends Model
+      class SecondModel extends FirstModel
+      assert.same "second_model", SecondModel\table_name!
+      assert.same "first_model", FirstModel\table_name!
 
   describe "relations", ->
     local models
@@ -514,19 +528,27 @@ describe "lapis.db.model", ->
       models.Users = class extends Model
         @primary_key: "id"
 
+      models.CoolUsers = class extends Model
+        @primary_key: "user_id"
+
       class Posts extends Model
         @relations: {
           {"user", belongs_to: "Users"}
+          {"cool_user", belongs_to: "CoolUsers", key: "owner_id"}
         }
 
       post = Posts!
       post.user_id = 123
+      post.owner_id = 99
 
       assert post\get_user!
       assert post\get_user!
+
+      post\get_cool_user!
 
       assert_queries {
         'SELECT * from "users" where "id" = 123 limit 1'
+        'SELECT * from "cool_users" where "user_id" = 99 limit 1'
       }, queries
 
 
@@ -629,13 +651,13 @@ describe "lapis.db.model", ->
       user\get_posts_paginated(per_page: 44)\get_page 3
 
       assert_queries {
-        'SELECT * from "posts" where "user_id" = 1234 limit 10 offset 0 '
-        'SELECT * from "posts" where "user_id" = 1234 limit 10 offset 10 '
+        'SELECT * from "posts" where "user_id" = 1234 LIMIT 10 OFFSET 0'
+        'SELECT * from "posts" where "user_id" = 1234 LIMIT 10 OFFSET 10'
         {
-          [[SELECT * from "posts" where "user_id" = 1234 AND "color" = 'blue' limit 10 offset 10 ]]
-          [[SELECT * from "posts" where "color" = 'blue' AND "user_id" = 1234 limit 10 offset 10 ]]
+          [[SELECT * from "posts" where "user_id" = 1234 AND "color" = 'blue' LIMIT 10 OFFSET 10]]
+          [[SELECT * from "posts" where "color" = 'blue' AND "user_id" = 1234 LIMIT 10 OFFSET 10]]
         }
-        'SELECT * from "posts" where "user_id" = 1234 limit 44 offset 88 '
+        'SELECT * from "posts" where "user_id" = 1234 LIMIT 44 OFFSET 88'
       }, queries
 
 
@@ -680,7 +702,7 @@ describe "lapis.db.model", ->
       assert Child.get_user, "expecting get_user"
       assert Child.get_category, "expecting get_category"
 
-    describe "polymorphic belongs to #ddd", ->
+    describe "polymorphic belongs to", ->
       local Foos, Bars, Bazs, Items
 
       before_each ->
@@ -794,6 +816,34 @@ describe "lapis.db.model", ->
           'SELECT * from "bars" where "id" in (2)'
         }, queries
 
+      it "preloads with fields", ->
+        items = {
+          Items\load {
+            object_type: 1
+            object_id: 111
+          }
+
+          Items\load {
+            object_type: 2
+            object_id: 112
+          }
+
+          Items\load {
+            object_type: 3
+            object_id: 113
+          }
+        }
+
+        Items\preload_objects items, fields: {
+          bar: "a, b"
+          baz: "c, d"
+        }
+
+        assert_queries {
+          'SELECT * from "foos" where "id" in (111)'
+          'SELECT a, b from "bars" where "id" in (112)'
+          'SELECT c, d from "bazs" where "id" in (113)'
+        }, queries
 
   describe "enum", ->
     import enum from require "lapis.db.model"

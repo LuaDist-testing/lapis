@@ -8,6 +8,11 @@ do
   local _obj_0 = table
   insert, concat = _obj_0.insert, _obj_0.concat
 end
+local require, type, setmetatable, rawget, assert, pairs, unpack, error, next
+do
+  local _obj_0 = _G
+  require, type, setmetatable, rawget, assert, pairs, unpack, error, next = _obj_0.require, _obj_0.type, _obj_0.setmetatable, _obj_0.rawget, _obj_0.assert, _obj_0.pairs, _obj_0.unpack, _obj_0.error, _obj_0.next
+end
 local cjson = require("cjson")
 local OffsetPaginator
 OffsetPaginator = require("lapis.db.pagination").OffsetPaginator
@@ -237,11 +242,10 @@ do
     end
   end
   self.table_name = function(self)
-    local name = underscore(self.__name)
-    self.table_name = function()
-      return name
+    if not (rawget(self, "__table_name")) then
+      self.__table_name = underscore(self.__name)
     end
-    return name
+    return self.__table_name
   end
   self.singular_name = function(self)
     return singularize(self:table_name())
@@ -277,7 +281,7 @@ do
     if query == nil then
       query = ""
     end
-    local opts = { }
+    local opts
     local param_count = select("#", ...)
     if param_count > 0 then
       local last = select(param_count, ...)
@@ -291,11 +295,19 @@ do
     end
     query = self.db.interpolate_query(query, ...)
     local tbl_name = self.db.escape_identifier(self:table_name())
-    local fields = opts.fields or "*"
+    local load_as = opts and opts.load
+    local fields = opts and opts.fields or "*"
     do
       local res = self.db.select(tostring(fields) .. " from " .. tostring(tbl_name) .. " " .. tostring(query))
       if res then
-        return self:load_all(res)
+        if load_as == false then
+          return res
+        end
+        if load_as then
+          return load_as:load_all(res)
+        else
+          return self:load_all(res)
+        end
       end
     end
   end

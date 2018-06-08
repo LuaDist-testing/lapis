@@ -1,17 +1,17 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "lapis"
-version = "1.2.0-1"
+version = "1.3.0-1"
 
 -- LuaDist source
 source = {
-  tag = "1.2.0-1",
+  tag = "1.3.0-1",
   url = "git://github.com/LuaDist-testing/lapis.git"
 }
 -- Original source
 -- source = {
 -- 	url = "git://github.com/leafo/lapis.git",
--- 	branch = "v1.2.0",
+-- 	branch = "v1.3.0"
 -- }
 
 description = {
@@ -33,7 +33,7 @@ dependencies = {
 	"luafilesystem",
 	"luasocket",
 	"mimetypes",
-	"pgmoon",
+	"pgmoon >= 1.2.0",
 }
 
 build = {
