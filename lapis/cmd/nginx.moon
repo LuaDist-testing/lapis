@@ -1,5 +1,7 @@
 
 CONFIG_PATH = "nginx.conf"
+CONFIG_PATH_ETLUA = "nginx.conf.etlua"
+
 COMPILED_CONFIG_PATH = "nginx.conf.compiled"
 
 path = require "lapis.cmd.path"
@@ -75,35 +77,59 @@ start_nginx = (background=false) ->
 
   os.execute cmd
 
-compile_config = (config, opts={}) ->
-  env = setmetatable {}, __index: (key) =>
+wrap_environment = (env) ->
+  setmetatable {}, __index: (key) =>
     v = os.getenv "LAPIS_" .. key\upper!
     return v if v != nil
-    opts[key\lower!]
+    env[key\lower!]
+
+add_config_header = (compiled, env) ->
+  header = if name = env._name
+    "env LAPIS_ENVIRONMENT=#{name};\n"
+  else
+    "env LAPIS_ENVIRONMENT;\n"
+
+  header .. compiled
+
+compile_config = (config, env={}, opts={}) ->
+  wrapped = opts.os_env == false and env or wrap_environment(env)
 
   out = config\gsub "(${%b{}})", (w) ->
     name = w\sub 4, -3
     filter_name, filter_arg = name\match "^(%S+)%s+(.+)$"
     if filter = filters[filter_name]
-      value = env[filter_arg]
+      value = wrapped[filter_arg]
       if value == nil then w else filter value
     else
-      value = env[name]
+      value = wrapped[name]
       if value == nil then w else value
 
-  env_header = if opts._name
-    "env LAPIS_ENVIRONMENT=#{opts._name};\n"
+  if opts.header == false
+    out
   else
-    "env LAPIS_ENVIRONMENT;\n"
+    add_config_header out, env
 
-  env_header .. out
+compile_etlua_config = (config, env={}, opts={}) ->
+  etlua = require "etlua"
+  wrapped = opts.os_env == false and env or wrap_environment(env)
+
+  template = assert etlua.compile config
+  out = template wrapped
+
+  if opts.header == false
+    out
+  else
+    add_config_header out, env
 
 write_config_for = (environment, process_fn, ...) ->
   if type(environment) == "string"
     config = require "lapis.config"
     environment = config.get environment
 
-  compiled = compile_config path.read_file(CONFIG_PATH), environment
+  compiled = if path.exists CONFIG_PATH_ETLUA
+    compile_etlua_config path.read_file(CONFIG_PATH_ETLUA), environment
+  else
+    compile_config path.read_file(CONFIG_PATH), environment
 
   if process_fn
     compiled = process_fn compiled, ...
@@ -209,20 +235,11 @@ class AttachedServer
     for k,v in pairs opts
       @[k] = v
 
-    db = require "lapis.nginx.postgres"
+    env = require "lapis.environment"
+    env.push @environment
+
     pg_config = @environment.postgres
-    if pg_config and pg_config.backend == "pgmoon"
-      import Postgres from require "pgmoon"
-      pgmoon = Postgres pg_config
-      assert pgmoon\connect!
-
-      logger = require("lapis.db").get_logger!
-      logger = nil unless os.getenv "LAPIS_SHOW_QUERIES"
-
-      @old_backend = db.set_backend "raw", (...) ->
-        logger.query ... if logger
-        assert pgmoon\query ...
-    else
+    if pg_config and not pg_config.backend == "pgmoon"
       @old_backend = db.set_backend "raw", @\query
 
   wait_until: (server_status="open")=>
@@ -262,8 +279,13 @@ class AttachedServer
     else
       send_hup!
 
-    db = require "lapis.nginx.postgres"
-    db.set_backend "raw", @old_backend
+    if @old_backend
+      db = require "lapis.db"
+      db.set_backend "raw", @old_backend
+
+    env = require "lapis.environment"
+    env.pop!
+
     true
 
   query: (q) =>
@@ -351,6 +373,7 @@ run_with_server = (fn) ->
   current_server\detach!
 
 
-{ :compile_config, :filters, :find_nginx, :start_nginx, :send_hup, :send_term,
-  :get_pid, :write_config_for, :attach_server, :detach_server, :send_signal,
-  :run_with_server }
+{ :compile_config, :compile_etlua_config, :filters, :find_nginx, :start_nginx,
+  :send_hup, :send_term, :get_pid, :write_config_for, :attach_server,
+  :detach_server, :send_signal, :run_with_server, :CONFIG_PATH,
+  :CONFIG_PATH_ETLUA }

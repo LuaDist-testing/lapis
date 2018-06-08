@@ -5,34 +5,17 @@ do
 end
 local raw_query
 local proxy_location = "/query"
-local logger = require("lapis.logging")
-local set_logger
-set_logger = function(l)
-  logger = l
-end
-local get_logger
-get_logger = function()
-  return logger
-end
+local logger
 local type, tostring, pairs, select
 do
   local _obj_0 = _G
   type, tostring, pairs, select = _obj_0.type, _obj_0.tostring, _obj_0.pairs, _obj_0.select
 end
-local NULL = { }
-local raw
-raw = function(val)
-  return {
-    "raw",
-    tostring(val)
-  }
+local NULL, TRUE, FALSE, raw, is_raw, format_date, build_helpers
+do
+  local _obj_0 = require("lapis.db.base")
+  NULL, TRUE, FALSE, raw, is_raw, format_date, build_helpers = _obj_0.NULL, _obj_0.TRUE, _obj_0.FALSE, _obj_0.raw, _obj_0.is_raw, _obj_0.format_date, _obj_0.build_helpers
 end
-local is_raw
-is_raw = function(val)
-  return type(val) == "table" and val[1] == "raw" and val[2]
-end
-local TRUE = raw("TRUE")
-local FALSE = raw("FALSE")
 local backends = {
   default = function(_proxy)
     if _proxy == nil then
@@ -66,15 +49,16 @@ local backends = {
     end
   end,
   pgmoon = function()
-    local after_dispatch
+    local after_dispatch, increment_perf
     do
       local _obj_0 = require("lapis.nginx.context")
-      after_dispatch = _obj_0.after_dispatch
+      after_dispatch, increment_perf = _obj_0.after_dispatch, _obj_0.increment_perf
     end
     local config = require("lapis.config").get()
     local pg_config = assert(config.postgres, "missing postgres configuration")
+    local pgmoon_conn
     raw_query = function(str)
-      local pgmoon = ngx and ngx.ctx.pgmoon
+      local pgmoon = ngx and ngx.ctx.pgmoon or pgmoon_conn
       if not (pgmoon) then
         local Postgres
         do
@@ -88,12 +72,24 @@ local backends = {
           after_dispatch(function()
             return pgmoon:keepalive()
           end)
+        else
+          pgmoon_conn = pgmoon
         end
       end
+      local start_time
+      if ngx and config.measure_performance then
+        ngx.update_time()
+        start_time = ngx.now()
+      end
       if logger then
-        logger.query("[PGMOON] " .. tostring(str))
+        logger.query(str)
       end
       local res, err = pgmoon:query(str)
+      if start_time then
+        ngx.update_time()
+        increment_perf("db_time", ngx.now() - start_time)
+        increment_perf("db_count", 1)
+      end
       if not res and err then
         error(tostring(str) .. "\n" .. tostring(err))
       end
@@ -108,15 +104,17 @@ set_backend = function(name, ...)
   end
   return assert(backends[name])(...)
 end
-local format_date
-format_date = function(time)
-  return os.date("!%Y-%m-%d %H:%M:%S", time)
-end
-local append_all
-append_all = function(t, ...)
-  for i = 1, select("#", ...) do
-    t[#t + 1] = select(i, ...)
+local init_logger
+init_logger = function()
+  if ngx or os.getenv("LAPIS_SHOW_QUERIES") then
+    logger = require("lapis.logging")
   end
+end
+local init_db
+init_db = function()
+  local config = require("lapis.config").get()
+  local default_backend = config.postgres and config.postgres.backend or "default"
+  return set_backend(default_backend)
 end
 local escape_identifier
 escape_identifier = function(ident)
@@ -145,93 +143,16 @@ escape_literal = function(val)
   end
   return error("don't know how to escape value: " .. tostring(val))
 end
-local interpolate_query
-interpolate_query = function(query, ...)
-  local values = {
-    ...
-  }
-  local i = 0
-  return (query:gsub("%?", function()
-    i = i + 1
-    return escape_literal(values[i])
-  end))
-end
-local encode_values
-encode_values = function(t, buffer)
-  local have_buffer = buffer
-  buffer = buffer or { }
-  local tuples
-  do
-    local _accum_0 = { }
-    local _len_0 = 1
-    for k, v in pairs(t) do
-      _accum_0[_len_0] = {
-        k,
-        v
-      }
-      _len_0 = _len_0 + 1
-    end
-    tuples = _accum_0
-  end
-  local cols = concat((function()
-    local _accum_0 = { }
-    local _len_0 = 1
-    for _index_0 = 1, #tuples do
-      local pair = tuples[_index_0]
-      _accum_0[_len_0] = escape_identifier(pair[1])
-      _len_0 = _len_0 + 1
-    end
-    return _accum_0
-  end)(), ", ")
-  local vals = concat((function()
-    local _accum_0 = { }
-    local _len_0 = 1
-    for _index_0 = 1, #tuples do
-      local pair = tuples[_index_0]
-      _accum_0[_len_0] = escape_literal(pair[2])
-      _len_0 = _len_0 + 1
-    end
-    return _accum_0
-  end)(), ", ")
-  append_all(buffer, "(", cols, ") VALUES (", vals, ")")
-  if not (have_buffer) then
-    return concat(buffer)
-  end
-end
-local encode_assigns
-encode_assigns = function(t, buffer)
-  local join = ", "
-  local have_buffer = buffer
-  buffer = buffer or { }
-  for k, v in pairs(t) do
-    append_all(buffer, escape_identifier(k), " = ", escape_literal(v), join)
-  end
-  buffer[#buffer] = nil
-  if not (have_buffer) then
-    return concat(buffer)
-  end
-end
-local encode_clause
-encode_clause = function(t, buffer)
-  local join = " AND "
-  local have_buffer = buffer
-  buffer = buffer or { }
-  for k, v in pairs(t) do
-    if v == NULL then
-      append_all(buffer, escape_identifier(k), " IS NULL", join)
-    else
-      append_all(buffer, escape_identifier(k), " = ", escape_literal(v), join)
-    end
-  end
-  buffer[#buffer] = nil
-  if not (have_buffer) then
-    return concat(buffer)
+local interpolate_query, encode_values, encode_assigns, encode_clause = build_helpers(escape_literal, escape_identifier)
+local append_all
+append_all = function(t, ...)
+  for i = 1, select("#", ...) do
+    t[#t + 1] = select(i, ...)
   end
 end
 raw_query = function(...)
-  local config = require("lapis.config").get()
-  local default_backend = config.postgres and config.postgres.backend or "default"
-  set_backend(default_backend)
+  init_logger()
+  init_db()
   return raw_query(...)
 end
 local query
@@ -403,8 +324,6 @@ return {
   encode_clause = encode_clause,
   interpolate_query = interpolate_query,
   parse_clause = parse_clause,
-  set_logger = set_logger,
-  get_logger = get_logger,
   format_date = format_date,
   set_backend = set_backend,
   select = _select,
