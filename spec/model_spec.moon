@@ -200,8 +200,8 @@ describe "lapis.db.model", ->
     res, np = pager\get_page 123
 
     assert_queries {
-      'SELECT * from "things" where color = blue order by "id" ASC limit 10'
-      'SELECT * from "things" where "id" > 123 and (color = blue) order by "id" ASC limit 10'
+      'SELECT * from "things" where color = blue order by "things"."id" ASC limit 10'
+      'SELECT * from "things" where "things"."id" > 123 and (color = blue) order by "things"."id" ASC limit 10'
     }, queries
 
   it "should ordered paginate with multiple keys", ->
@@ -227,16 +227,16 @@ describe "lapis.db.model", ->
     pager\before 32, 42
 
     assert_queries {
-      'SELECT * from "things" where color = blue order by "id" ASC, "updated_at" ASC limit 10'
+      'SELECT * from "things" where color = blue order by "things"."id" ASC, "things"."updated_at" ASC limit 10'
 
-      'SELECT * from "things" where color = blue order by "id" ASC, "updated_at" ASC limit 10'
-      'SELECT * from "things" where color = blue order by "id" DESC, "updated_at" DESC limit 10'
+      'SELECT * from "things" where color = blue order by "things"."id" ASC, "things"."updated_at" ASC limit 10'
+      'SELECT * from "things" where color = blue order by "things"."id" DESC, "things"."updated_at" DESC limit 10'
 
-      'SELECT * from "things" where "id" > 100 and (color = blue) order by "id" ASC, "updated_at" ASC limit 10'
-      'SELECT * from "things" where "id" < 32 and (color = blue) order by "id" DESC, "updated_at" DESC limit 10'
+      'SELECT * from "things" where "things"."id" > 100 and (color = blue) order by "things"."id" ASC, "things"."updated_at" ASC limit 10'
+      'SELECT * from "things" where "things"."id" < 32 and (color = blue) order by "things"."id" DESC, "things"."updated_at" DESC limit 10'
 
-      'SELECT * from "things" where "id" >= 100 and "updated_at" > 200 and (color = blue) order by "id" ASC, "updated_at" ASC limit 10'
-      'SELECT * from "things" where "id" <= 32 and "updated_at" < 42 and (color = blue) order by "id" DESC, "updated_at" DESC limit 10'
+      'SELECT * from "things" where "things"."id" >= 100 and "things"."updated_at" > 200 and (color = blue) order by "things"."id" ASC, "things"."updated_at" ASC limit 10'
+      'SELECT * from "things" where "things"."id" <= 32 and "things"."updated_at" < 42 and (color = blue) order by "things"."id" DESC, "things"."updated_at" DESC limit 10'
     }, queries
 
 
@@ -299,6 +299,15 @@ describe "lapis.db.model", ->
       }
     }, queries
 
+  it "should create model with returning *", ->
+    query_mock['INSERT'] = { { id: 101, color: "blue" } }
+
+    class Hi extends Model
+    Hi\create { color: "blue" }, returning: "*"
+
+    assert_queries {
+      [[INSERT INTO "hi" ("color") VALUES ('blue') RETURNING *]]
+    }, queries
 
   it "should refresh model", ->
     class Things extends Model
@@ -844,6 +853,25 @@ describe "lapis.db.model", ->
           'SELECT a, b from "bars" where "id" in (112)'
           'SELECT c, d from "bazs" where "id" in (113)'
         }, queries
+
+    it "should find relation", ->
+      import find_relation from require "lapis.db.model.relations"
+
+      class Posts extends Model
+        @relations: {
+          {"user", belongs_to: "Users"}
+          {"cool_user", belongs_to: "CoolUsers", key: "owner_id"}
+        }
+
+      class BetterPosts extends Posts
+        @relations: {
+          {"tags", has_many: "Tags"}
+        }
+
+      assert.same {"user", belongs_to: "Users"}, (find_relation Posts, "user")
+      assert.same nil, (find_relation Posts, "not there")
+      assert.same {"cool_user", belongs_to: "CoolUsers", key: "owner_id"},
+        (find_relation BetterPosts, "cool_user")
 
   describe "enum", ->
     import enum from require "lapis.db.model"

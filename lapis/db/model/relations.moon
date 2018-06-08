@@ -1,6 +1,25 @@
+LOADED_KEY = setmetatable {}, __tostring: => "::loaded_relations::"
+
 assert_model = (primary_model, model_name) ->
   with m = primary_model\get_relation_model model_name
     error "failed to find model `#{model_name}` for relation" unless m
+
+find_relation = (model, name) ->
+  return unless model
+
+  if rs = model.relations
+    for relation in *rs
+      if relation[1] == name
+        return relation
+
+  if p = model.__parent
+    find_relation p, name
+
+clear_loaded_relation = (item, name) ->
+  item[name] = nil
+  if loaded = item[LOADED_KEY]
+    loaded[name] = nil
+  true
 
 fetch = (name, opts) =>
   source = opts.fetch
@@ -10,7 +29,14 @@ fetch = (name, opts) =>
 
   @__base[get_method] = =>
     existing = @[name]
-    return existing if existing != nil
+
+    loaded = @[LOADED_KEY]
+    return existing if existing != nil or loaded and loaded[name]
+    if loaded
+      loaded[name] = true
+    else
+      @[LOADED_KEY] = { [name]: true }
+
     with obj = source @
       @[name] = obj
 
@@ -24,7 +50,14 @@ belongs_to = (name, opts) =>
   @__base[get_method] = =>
     return nil unless @[column_name]
     existing = @[name]
-    return existing if existing != nil
+
+    loaded = @[LOADED_KEY]
+    return existing if existing != nil or loaded and loaded[name]
+    if loaded
+      loaded[name] = true
+    else
+      @[LOADED_KEY] = { [name]: true }
+
     model = assert_model @@, source
     with obj = model\find @[column_name]
       @[name] = obj
@@ -37,7 +70,14 @@ has_one = (name, opts) =>
 
   @__base[get_method] = =>
     existing = @[name]
-    return existing if existing != nil
+
+    loaded = @[LOADED_KEY]
+    return existing if existing != nil or loaded and loaded[name]
+    if loaded
+      loaded[name] = true
+    else
+      @[LOADED_KEY] = { [name]: true }
+
     model = assert_model @@, source
 
     foreign_key = opts.key or "#{@@singular_name!}_id"
@@ -76,7 +116,14 @@ has_many = (name, opts) =>
 
   @__base[get_method] = =>
     existing = @[name]
-    return existing if existing != nil
+
+    loaded = @[LOADED_KEY]
+    return existing if existing != nil or loaded and loaded[name]
+    if loaded
+      loaded[name] = true
+    else
+      @[LOADED_KEY] = { [name]: true }
+
     model = assert_model @@, source
 
     with res = model\select build_query(@)
@@ -141,12 +188,20 @@ polymorphic_belongs_to = (name, opts) =>
 
   @__base[get_method] = =>
     existing = @[name]
-    return existing if existing != nil
+
+    loaded = @[LOADED_KEY]
+    return existing if existing != nil or loaded and loaded[name]
+    if loaded
+      loaded[name] = true
+    else
+      @[LOADED_KEY] = { [name]: true }
 
     if t = @[type_col]
       model = @@[model_for_type_method] @@, t
       with obj = model\find @[id_col]
         @[name] = obj
 
-
-{ :fetch, :belongs_to, :has_one, :has_many, :polymorphic_belongs_to }
+{
+  :fetch, :belongs_to, :has_one, :has_many, :polymorphic_belongs_to,
+  :find_relation, :clear_loaded_relation, :LOADED_KEY
+}

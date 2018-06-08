@@ -51,7 +51,7 @@ class Likes extends Model
     create_table @table_name!, {
       {"user_id", types.foreign_key}
       {"post_id", types.foreign_key}
-      {"count", types.integer}
+      {"count", types.integer default: 1}
       {"created_at", types.time}
       {"updated_at", types.time}
       "PRIMARY KEY (user_id, post_id)"
@@ -112,6 +112,28 @@ describe "model", ->
       assert.same 2, like.user_id
       assert.same 4, like.post_id
 
+    it "should create with returning all", ->
+      Likes\create_table!
+      like = Likes\create {
+        user_id: 9
+        post_id: db.raw "2 * 2"
+      }, returning: "*"
+
+      assert.same 1, like.count
+      assert.same 9, like.user_id
+      assert.same 4, like.post_id
+
+    it "should create with returning specified column", ->
+      Likes\create_table!
+      like = Likes\create {
+        user_id: 2
+        post_id: db.raw "9 * 2"
+      }, returning: {"count"}
+
+      assert.same 1, like.count
+      assert.same 2, like.user_id
+      assert.same 18, like.post_id
+
     it "should create with returning null", ->
       Posts\create_table!
       post = Posts\create {
@@ -153,7 +175,7 @@ describe "model", ->
       post\update user_id: db.raw "(case when false then 1234 else null end)"
       assert.same nil, post.user_id
 
-  describe "arrays #ddd", ->
+  describe "arrays", ->
     before_each ->
       HasArrays\create_table!
 

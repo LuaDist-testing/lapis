@@ -82,6 +82,35 @@ for _index_0 = 1, #void_tags do
   local tag = void_tags[_index_0]
   void_tags[tag] = true
 end
+local classnames
+classnames = function(t)
+  local ccs
+  do
+    local _accum_0 = { }
+    local _len_0 = 1
+    for k, v in pairs(t) do
+      local _continue_0 = false
+      repeat
+        if type(k) == "number" then
+          _accum_0[_len_0] = v
+        else
+          if not (v) then
+            _continue_0 = true
+            break
+          end
+          _accum_0[_len_0] = k
+        end
+        _len_0 = _len_0 + 1
+        _continue_0 = true
+      until true
+      if not _continue_0 then
+        break
+      end
+    end
+    ccs = _accum_0
+  end
+  return table.concat(ccs, " ")
+end
 local element_attributes
 element_attributes = function(buffer, t)
   if not (type(t) == "table") then
@@ -89,12 +118,18 @@ element_attributes = function(buffer, t)
   end
   for k, v in pairs(t) do
     if type(k) == "string" and not k:match("^__") then
-      if type(v) == "boolean" then
+      local vtype = type(v)
+      if vtype == "boolean" then
         if v then
           buffer:write(" ", k)
         end
       else
-        buffer:write(" ", k, "=", '"', escape(tostring(v)), '"')
+        if vtype == "table" and k == "class" then
+          v = classnames(v)
+        else
+          v = tostring(v)
+        end
+        buffer:write(" ", k, "=", '"', escape(v), '"')
       end
     end
   end
@@ -139,6 +174,7 @@ element = function(buffer, name, attrs, ...)
 end
 local Buffer
 do
+  local _class_0
   local _base_0 = {
     builders = {
       html_5 = function(...)
@@ -308,7 +344,7 @@ do
     end
   }
   _base_0.__index = _base_0
-  local _class_0 = setmetatable({
+  _class_0 = setmetatable({
     __init = function(self, buffer)
       self.buffer = buffer
       self.old_env = { }
@@ -347,6 +383,7 @@ local helper_key = setmetatable({ }, {
 })
 local Widget
 do
+  local _class_0
   local _base_0 = {
     _set_helper_chain = function(self, chain)
       return rawset(self, helper_key, chain)
@@ -494,7 +531,7 @@ do
     end
   }
   _base_0.__index = _base_0
-  local _class_0 = setmetatable({
+  _class_0 = setmetatable({
     __init = function(self, opts)
       if opts then
         for k, v in pairs(opts) do
@@ -538,5 +575,6 @@ return {
   render_html = render_html,
   escape = escape,
   unescape = unescape,
+  classnames = classnames,
   CONTENT_FOR_PREFIX = CONTENT_FOR_PREFIX
 }

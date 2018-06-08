@@ -18,6 +18,7 @@ local OffsetPaginator
 OffsetPaginator = require("lapis.db.pagination").OffsetPaginator
 local Enum
 do
+  local _class_0
   local debug
   local _base_0 = {
     for_db = function(self, key)
@@ -43,7 +44,7 @@ do
     end
   }
   _base_0.__index = _base_0
-  local _class_0 = setmetatable({
+  _class_0 = setmetatable({
     __init = function() end,
     __base = _base_0,
     __name = "Enum"
@@ -123,6 +124,7 @@ add_relations = function(self, relations)
 end
 local BaseModel
 do
+  local _class_0
   local _base_0 = {
     _primary_cond = function(self)
       local cond = { }
@@ -194,6 +196,15 @@ do
           self[field] = res[field]
         end
       else
+        local relations = require("lapis.db.model.relations")
+        do
+          local loaded_relations = self[relations.LOADED_KEY]
+          if loaded_relations then
+            for name in pairs(loaded_relations) do
+              relations.clear_loaded_relation(self, name)
+            end
+          end
+        end
         for k, v in pairs(self) do
           self[k] = nil
         end
@@ -206,7 +217,7 @@ do
     end
   }
   _base_0.__index = _base_0
-  local _class_0 = setmetatable({
+  _class_0 = setmetatable({
     __init = function() end,
     __base = _base_0,
     __name = "BaseModel"
@@ -262,13 +273,14 @@ do
   end
   self.scoped_model = function(base_model, prefix, mod, external_models)
     do
+      local _class_1
       local _parent_0 = base_model
       local _base_1 = { }
       _base_1.__index = _base_1
       setmetatable(_base_1, _parent_0.__base)
-      local _class_1 = setmetatable({
+      _class_1 = setmetatable({
         __init = function(self, ...)
-          return _parent_0.__init(self, ...)
+          return _class_1.__parent.__init(self, ...)
         end,
         __base = _base_1,
         __name = nil,
@@ -277,7 +289,10 @@ do
         __index = function(cls, name)
           local val = rawget(_base_1, name)
           if val == nil then
-            return _parent_0[name]
+            local parent = rawget(cls, "__parent")
+            if parent then
+              return parent[name]
+            end
           else
             return val
           end
@@ -290,15 +305,17 @@ do
       })
       _base_1.__class = _class_1
       local self = _class_1
-      if mod then
-        self.get_relation_model = function(self, name)
-          if external_models and external_models[name] then
-            return base_model:get_relation_model(name)
-          else
-            return require(mod)[name]
+      self.get_relation_model = (function()
+        if mod then
+          return function(self, name)
+            if external_models and external_models[name] then
+              return base_model:get_relation_model(name)
+            else
+              return require(mod)[name]
+            end
           end
         end
-      end
+      end)()
       self.table_name = function(self)
         return tostring(prefix) .. tostring(base_model.table_name(self))
       end

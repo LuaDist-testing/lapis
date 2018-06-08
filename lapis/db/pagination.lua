@@ -55,6 +55,7 @@ rebuild_query_clause = function(parsed)
 end
 local Paginator
 do
+  local _class_0
   local _base_0 = {
     select = function(self, ...)
       return self.model:select(...)
@@ -71,7 +72,7 @@ do
     end
   }
   _base_0.__index = _base_0
-  local _class_0 = setmetatable({
+  _class_0 = setmetatable({
     __init = function(self, model, clause, ...)
       if clause == nil then
         clause = ""
@@ -110,6 +111,7 @@ do
 end
 local OffsetPaginator
 do
+  local _class_0
   local _parent_0 = Paginator
   local _base_0 = {
     per_page = 10,
@@ -166,9 +168,9 @@ do
   }
   _base_0.__index = _base_0
   setmetatable(_base_0, _parent_0.__base)
-  local _class_0 = setmetatable({
+  _class_0 = setmetatable({
     __init = function(self, ...)
-      return _parent_0.__init(self, ...)
+      return _class_0.__parent.__init(self, ...)
     end,
     __base = _base_0,
     __name = "OffsetPaginator",
@@ -177,7 +179,10 @@ do
     __index = function(cls, name)
       local val = rawget(_base_0, name)
       if val == nil then
-        return _parent_0[name]
+        local parent = rawget(cls, "__parent")
+        if parent then
+          return parent[name]
+        end
       else
         return val
       end
@@ -196,6 +201,7 @@ do
 end
 local OrderedPaginator
 do
+  local _class_0
   local _parent_0 = Paginator
   local _base_0 = {
     order = "ASC",
@@ -227,6 +233,8 @@ do
     get_ordered = function(self, order, ...)
       local parsed = assert(self.db.parse_clause(self._clause))
       local has_multi_fields = type(self.field) == "table" and not self.db.is_raw(self.field)
+      local table_name = self.model:table_name()
+      local prefix = self.db.escape_identifier(table_name) .. "."
       local escaped_fields
       if has_multi_fields then
         do
@@ -235,14 +243,14 @@ do
           local _list_0 = self.field
           for _index_0 = 1, #_list_0 do
             local f = _list_0[_index_0]
-            _accum_0[_len_0] = self.db.escape_identifier(f)
+            _accum_0[_len_0] = prefix .. self.db.escape_identifier(f)
             _len_0 = _len_0 + 1
           end
           escaped_fields = _accum_0
         end
       else
         escaped_fields = {
-          self.db.escape_identifier(self.field)
+          prefix .. self.db.escape_identifier(self.field)
         }
       end
       if parsed.order then
@@ -307,10 +315,10 @@ do
   }
   _base_0.__index = _base_0
   setmetatable(_base_0, _parent_0.__base)
-  local _class_0 = setmetatable({
+  _class_0 = setmetatable({
     __init = function(self, model, field, ...)
       self.field = field
-      _parent_0.__init(self, model, ...)
+      _class_0.__parent.__init(self, model, ...)
       if self.opts and self.opts.order then
         self.order = self.opts.order
         self.opts.order = nil
@@ -323,7 +331,10 @@ do
     __index = function(cls, name)
       local val = rawget(_base_0, name)
       if val == nil then
-        return _parent_0[name]
+        local parent = rawget(cls, "__parent")
+        if parent then
+          return parent[name]
+        end
       else
         return val
       end

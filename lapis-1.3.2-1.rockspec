@@ -1,17 +1,17 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "lapis"
-version = "1.3.1-1"
+version = "1.3.2-1"
 
 -- LuaDist source
 source = {
-  tag = "1.3.1-1",
+  tag = "1.3.2-1",
   url = "git://github.com/LuaDist-testing/lapis.git"
 }
 -- Original source
 -- source = {
 -- 	url = "git://github.com/leafo/lapis.git",
--- 	branch = "v1.3.1"
+-- 	branch = "v1.3.2"
 -- }
 
 description = {

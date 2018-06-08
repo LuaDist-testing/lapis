@@ -6,6 +6,7 @@ do
 end
 local Model
 do
+  local _class_0
   local _parent_0 = BaseModel
   local _base_0 = {
     update = function(self, first, ...)
@@ -91,9 +92,9 @@ do
   }
   _base_0.__index = _base_0
   setmetatable(_base_0, _parent_0.__base)
-  local _class_0 = setmetatable({
+  _class_0 = setmetatable({
     __init = function(self, ...)
-      return _parent_0.__init(self, ...)
+      return _class_0.__parent.__init(self, ...)
     end,
     __base = _base_0,
     __name = "Model",
@@ -102,7 +103,10 @@ do
     __index = function(cls, name)
       local val = rawget(_base_0, name)
       if val == nil then
-        return _parent_0[name]
+        local parent = rawget(cls, "__parent")
+        if parent then
+          return parent[name]
+        end
       else
         return val
       end
@@ -130,23 +134,32 @@ do
     if self.timestamp then
       values._timestamp = true
     end
-    local returning
+    local returning, return_all
     if opts and opts.returning then
-      returning = {
-        self:primary_keys()
-      }
-      local _list_0 = opts.returning
-      for _index_0 = 1, #_list_0 do
-        local field = _list_0[_index_0]
-        table.insert(returning, field)
-      end
-    end
-    for k, v in pairs(values) do
-      if db.is_raw(v) then
-        returning = returning or {
+      if opts.returning == "*" then
+        return_all = true
+        returning = {
+          db.raw("*")
+        }
+      else
+        returning = {
           self:primary_keys()
         }
-        table.insert(returning, k)
+        local _list_0 = opts.returning
+        for _index_0 = 1, #_list_0 do
+          local field = _list_0[_index_0]
+          table.insert(returning, field)
+        end
+      end
+    end
+    if not (return_all) then
+      for k, v in pairs(values) do
+        if db.is_raw(v) then
+          returning = returning or {
+            self:primary_keys()
+          }
+          table.insert(returning, k)
+        end
       end
     end
     local res
@@ -156,7 +169,7 @@ do
       res = db.insert(self:table_name(), values, self:primary_keys())
     end
     if res then
-      if returning then
+      if returning and not return_all then
         for _index_0 = 1, #returning do
           local k = returning[_index_0]
           values[k] = res[1][k]

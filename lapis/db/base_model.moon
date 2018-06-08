@@ -379,6 +379,12 @@ class BaseModel
       for field in *field_names
         @[field] = res[field]
     else
+      relations = require "lapis.db.model.relations"
+
+      if loaded_relations = @[relations.LOADED_KEY]
+        for name in pairs loaded_relations
+          relations.clear_loaded_relation @, name
+
       for k,v in pairs @
         @[k] = nil
 

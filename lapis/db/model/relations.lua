@@ -1,3 +1,8 @@
+local LOADED_KEY = setmetatable({ }, {
+  __tostring = function(self)
+    return "::loaded_relations::"
+  end
+})
 local assert_model
 assert_model = function(primary_model, model_name)
   do
@@ -8,6 +13,40 @@ assert_model = function(primary_model, model_name)
     return m
   end
 end
+local find_relation
+find_relation = function(model, name)
+  if not (model) then
+    return 
+  end
+  do
+    local rs = model.relations
+    if rs then
+      for _index_0 = 1, #rs do
+        local relation = rs[_index_0]
+        if relation[1] == name then
+          return relation
+        end
+      end
+    end
+  end
+  do
+    local p = model.__parent
+    if p then
+      return find_relation(p, name)
+    end
+  end
+end
+local clear_loaded_relation
+clear_loaded_relation = function(item, name)
+  item[name] = nil
+  do
+    local loaded = item[LOADED_KEY]
+    if loaded then
+      loaded[name] = nil
+    end
+  end
+  return true
+end
 local fetch
 fetch = function(self, name, opts)
   local source = opts.fetch
@@ -15,8 +54,16 @@ fetch = function(self, name, opts)
   local get_method = opts.as or "get_" .. tostring(name)
   self.__base[get_method] = function(self)
     local existing = self[name]
-    if existing ~= nil then
+    local loaded = self[LOADED_KEY]
+    if existing ~= nil or loaded and loaded[name] then
       return existing
+    end
+    if loaded then
+      loaded[name] = true
+    else
+      self[LOADED_KEY] = {
+        [name] = true
+      }
     end
     do
       local obj = source(self)
@@ -36,8 +83,16 @@ belongs_to = function(self, name, opts)
       return nil
     end
     local existing = self[name]
-    if existing ~= nil then
+    local loaded = self[LOADED_KEY]
+    if existing ~= nil or loaded and loaded[name] then
       return existing
+    end
+    if loaded then
+      loaded[name] = true
+    else
+      self[LOADED_KEY] = {
+        [name] = true
+      }
     end
     local model = assert_model(self.__class, source)
     do
@@ -54,8 +109,16 @@ has_one = function(self, name, opts)
   local get_method = opts.as or "get_" .. tostring(name)
   self.__base[get_method] = function(self)
     local existing = self[name]
-    if existing ~= nil then
+    local loaded = self[LOADED_KEY]
+    if existing ~= nil or loaded and loaded[name] then
       return existing
+    end
+    if loaded then
+      loaded[name] = true
+    else
+      self[LOADED_KEY] = {
+        [name] = true
+      }
     end
     local model = assert_model(self.__class, source)
     local foreign_key = opts.key or tostring(self.__class:singular_name()) .. "_id"
@@ -100,8 +163,16 @@ has_many = function(self, name, opts)
   end
   self.__base[get_method] = function(self)
     local existing = self[name]
-    if existing ~= nil then
+    local loaded = self[LOADED_KEY]
+    if existing ~= nil or loaded and loaded[name] then
       return existing
+    end
+    if loaded then
+      loaded[name] = true
+    else
+      self[LOADED_KEY] = {
+        [name] = true
+      }
     end
     local model = assert_model(self.__class, source)
     do
@@ -193,8 +264,16 @@ polymorphic_belongs_to = function(self, name, opts)
   end
   self.__base[get_method] = function(self)
     local existing = self[name]
-    if existing ~= nil then
+    local loaded = self[LOADED_KEY]
+    if existing ~= nil or loaded and loaded[name] then
       return existing
+    end
+    if loaded then
+      loaded[name] = true
+    else
+      self[LOADED_KEY] = {
+        [name] = true
+      }
     end
     do
       local t = self[type_col]
@@ -214,5 +293,8 @@ return {
   belongs_to = belongs_to,
   has_one = has_one,
   has_many = has_many,
-  polymorphic_belongs_to = polymorphic_belongs_to
+  polymorphic_belongs_to = polymorphic_belongs_to,
+  find_relation = find_relation,
+  clear_loaded_relation = clear_loaded_relation,
+  LOADED_KEY = LOADED_KEY
 }

@@ -41,6 +41,7 @@ run_before_filter = function(filter, r)
 end
 local Request
 do
+  local _class_0
   local _base_0 = {
     add_params = function(self, params, name)
       self[name] = params
@@ -200,7 +201,11 @@ do
         parsed.query = query
       end
       parsed.path = path
-      if parsed.port == "80" then
+      local scheme = parsed.scheme or "http"
+      if scheme == "http" and parsed.port == "80" then
+        parsed.port = nil
+      end
+      if scheme == "https" and parsed.port == "443" then
         parsed.port = nil
       end
       if options then
@@ -260,7 +265,7 @@ do
     end
   }
   _base_0.__index = _base_0
-  local _class_0 = setmetatable({
+  _class_0 = setmetatable({
     __init = function(self, app, req, res)
       self.app, self.req, self.res = app, req, res
       self.buffer = { }
@@ -286,6 +291,7 @@ do
 end
 local Application
 do
+  local _class_0
   local _base_0 = {
     Request = Request,
     layout = require("lapis.views.layout"),
@@ -474,7 +480,7 @@ do
     end
   }
   _base_0.__index = _base_0
-  local _class_0 = setmetatable({
+  _class_0 = setmetatable({
     __init = function(self)
       return self:build_router()
     end,
