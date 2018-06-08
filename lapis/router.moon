@@ -22,34 +22,142 @@ reduce = (items, fn) ->
     left = fn left, items[i]
   left
 
+route_precedence = (flags) ->
+  p = 0
+
+  if flags.var
+    p += 1
+
+  if flags.splat
+    p += 2
+
+  p
+
+
+class RouteParser
+  new: =>
+    @grammar = @build_grammar!
+
+  -- returns an lpeg patternt that matches route, along with table of flags
+  parse: (route) =>
+    @grammar\match route
+
+  compile_chunks: (chunks) =>
+    local patt
+    flags = {}
+
+    for i, {kind, value, val_params} in ipairs chunks
+      following = chunks[i+1]
+      exclude = if following and following[1] == "literal"
+        following[2]
+
+      flags[kind] = true
+
+      part = switch kind
+        when "splat"
+          inside = P 1
+          inside -= exclude if exclude
+          Cg inside^1, "splat"
+        when "var"
+          char = val_params and @compile_character_class(val_params) or P 1
+          inside = char - "/"
+          inside -= exclude if exclude
+          Cg inside^1, value
+        when "literal"
+          P value
+        when "optional"
+          for k,v in pairs val_params
+            flags[k] or= v
+          value^-1
+        else
+          error "unknown node: #{kind}"
+
+      patt = if patt
+        patt * part
+      else
+        part
+
+    patt, flags
+
+  -- convert character class, like %d to an lpeg pattern
+  compile_character_class: (chars) =>
+    @character_class_pattern or= Ct C(
+      P"%" * S"adw" +
+      (C(1) * P"-" * C(1) / (a, b) -> "#{a}#{b}") +
+      1
+    )^1
+
+    plain_chars = {}
+    patterns = for item in *@character_class_pattern\match chars
+      switch item
+        when "%a"
+          R "az", "AZ"
+        when "%d"
+          R "09"
+        when "%w"
+          R "09", "az", "AZ"
+        else
+          if #item == 2
+            R item
+          else
+            table.insert plain_chars, item
+            continue
+
+
+    if next plain_chars
+      table.insert patterns, S table.concat plain_chars
+
+    local out
+    for p in *patterns
+      if out
+        out += p
+      else
+        out = p
+
+    out or P -1
+
+  build_grammar: =>
+    alpha = R("az", "AZ", "__")
+    alpha_num = alpha + R("09")
+
+    make_var = (str, char_class) -> { "var", str\sub(2), char_class }
+    make_splat = -> { "splat" }
+    make_lit = (str) -> { "literal", str }
+    make_optional = (...) -> { "optional", ... }
+
+    splat = P"*"
+    var = P":" * alpha * alpha_num^0
+
+    @var = var
+    @splat = splat
+
+    var = C(var) * (P"[" * C((1 - P"]")^1) * P"]")^-1
+
+    chunk = var / make_var + splat / make_splat
+    chunk = (1 - chunk)^1 / make_lit + chunk
+
+    compile_chunks = @\compile_chunks
+
+    P {
+      "route"
+      optional_literal: (1 - P")" - V"chunk")^1 / make_lit
+      optional_route: Ct((V"chunk" + V"optional_literal")^1) / compile_chunks
+      optional: P"(" * V"optional_route" * P")" / make_optional
+
+      literal: (1 - V"chunk")^1 / make_lit
+      chunk: var / make_var + splat / make_splat + V"optional"
+
+      route: Ct((V"chunk" + V"literal")^1) / compile_chunks / (p, f) ->
+        Ct(p) * -1, f
+
+    }
+
+
 class Router
-  alpha = R("az", "AZ", "__")
-  alpha_num = alpha + R("09")
-  slug = (P(1) - "/") ^ 1
-
-  make_var = (str) ->
-    name = str\sub 2
-    Cg slug, name
-
-  make_splat = ->
-    Cg P(1)^1, "splat"
-
-  make_lit = (str) -> P(str)
-
-  splat = P"*"
-  symbol = P":" * alpha * alpha_num^0
-
-  -- chunk = (1 - symbol)^1 / make_lit + symbol / make_var
-  chunk = symbol / make_var + splat / make_splat
-  chunk = (1 - chunk)^1 / make_lit + chunk
-
-  @route_grammar = Ct(chunk^1) / (parts) ->
-    patt = reduce parts, (a,b) -> a * b
-    Ct patt
-
   new: =>
     @routes = {}
     @named_routes = {}
+    @parser = RouteParser!
 
   add_route: (route, responder) =>
     @p = nil
@@ -68,11 +176,33 @@ class Router
     error "failed to find route: " .. route
 
   build: =>
-    @p = reduce [@build_route unpack r for r in *@routes], (a, b) -> a + b
+    by_precedence = {}
+
+    for r in *@routes
+      pattern, flags = @build_route unpack r
+      p = route_precedence flags
+      by_precedence[p] or= {}
+      table.insert by_precedence[p], pattern
+
+    precedences = [k for k in pairs by_precedence]
+    table.sort precedences
+
+    @p = nil
+    for p in *precedences
+      for pattern in *by_precedence[p]
+        if @p
+          @p += pattern
+        else
+          @p = pattern
+
+    @p or= P -1
   
   build_route: (path, responder, name) =>
-    @@route_grammar\match(path) * -1 / (params) ->
+    pattern, flags = @parser\parse path
+    pattern = pattern / (params) ->
       params, responder, path, name
+
+    pattern, flags
 
   fill_path: (path, params={}, route_name) =>
     replace = (s) ->
@@ -88,7 +218,12 @@ class Router
       else
         ""
 
-    patt = Cs (symbol / replace + 1)^0
+    patt = Cs (
+      @parser.var / replace +
+      @parser.splat / (params.splat or "") +
+      1
+    )^0
+
     patt\match(path)
 
   url_for: (name, params, query) =>
@@ -112,5 +247,5 @@ class Router
     else
       @default_route route, params, path, name
 
-{ :Router }
+{ :Router, :RouteParser }
 

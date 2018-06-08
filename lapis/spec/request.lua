@@ -167,7 +167,7 @@ mock_request = function(app_cls, url, opts)
     req = {
       read_body = function() end,
       get_body_data = function()
-        return opts.body or encode_query_string(opts.post)
+        return opts.body or opts.post and encode_query_string(opts.post) or nil
       end,
       get_headers = function()
         return headers
@@ -217,14 +217,16 @@ mock_request = function(app_cls, url, opts)
   logger.request = old_logger
   out_headers = normalize_headers(out_headers)
   local body = concat(buffer)
-  if out_headers.x_lapis_error then
-    local json = require("cjson")
-    local status, err, trace
-    do
-      local _obj_0 = json.decode(body)
-      status, err, trace = _obj_0.status, _obj_0.err, _obj_0.trace
+  if not (opts.allow_error) then
+    if out_headers.x_lapis_error then
+      local json = require("cjson")
+      local status, err, trace
+      do
+        local _obj_0 = json.decode(body)
+        status, err, trace = _obj_0.status, _obj_0.err, _obj_0.trace
+      end
+      error("\n" .. tostring(status) .. "\n" .. tostring(err) .. "\n" .. tostring(trace))
     end
-    error("\n" .. tostring(status) .. "\n" .. tostring(err) .. "\n" .. tostring(trace))
   end
   if opts.expect == "json" then
     local json = require("cjson")

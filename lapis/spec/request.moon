@@ -126,7 +126,7 @@ mock_request = (app_cls, url, opts={}) ->
 
     req: {
       read_body: ->
-      get_body_data: -> opts.body or encode_query_string opts.post
+      get_body_data: -> opts.body or opts.post and encode_query_string(opts.post) or nil
       get_headers: -> headers
       get_uri_args: ->
         out = {}
@@ -170,10 +170,11 @@ mock_request = (app_cls, url, opts={}) ->
 
   body = concat(buffer)
 
-  if out_headers.x_lapis_error
-    json = require "cjson"
-    {:status, :err, :trace} = json.decode body
-    error "\n#{status}\n#{err}\n#{trace}"
+  unless opts.allow_error
+    if out_headers.x_lapis_error
+      json = require "cjson"
+      {:status, :err, :trace} = json.decode body
+      error "\n#{status}\n#{err}\n#{trace}"
 
   if opts.expect == "json"
     json = require "cjson"
