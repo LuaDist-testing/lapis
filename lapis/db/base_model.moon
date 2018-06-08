@@ -121,17 +121,23 @@ class BaseModel
 
     if param_count > 0
       last = select param_count, ...
-      opts = last if type(last) == "table"
+      if not @db.is_encodable last
+        opts = last
+        param_count -= 1
+
 
     if type(query) == "table"
       opts = query
       query = ""
 
-    query = @db.interpolate_query query, ...
+    if param_count > 0
+      query = @db.interpolate_query query, ...
+
     tbl_name = @db.escape_identifier @table_name!
 
     load_as = opts and opts.load
     fields = opts and opts.fields or "*"
+
     if res = @db.select "#{fields} from #{tbl_name} #{query}"
       return res if load_as == false
       if load_as
@@ -196,7 +202,7 @@ class BaseModel
 
       query = "#{fields} from #{tbl_name} where #{find_by_escaped} in (#{flat_ids})"
 
-      if opts and opts.where
+      if opts and opts.where and next opts.where
         query ..= " and " .. @db.encode_clause opts.where
 
       if order = many and opts.order
@@ -249,14 +255,12 @@ class BaseModel
     other_records
 
   @find_all: (ids, by_key=@primary_key) =>
-    where = nil
-    clause = nil
-    fields = "*"
+    local extra_where, clause, fields
 
     -- parse opts
     if type(by_key) == "table"
       fields = by_key.fields or fields
-      where = by_key.where
+      extra_where = by_key.where
       clause = by_key.clause
       by_key = by_key.key or @primary_key
 
@@ -264,14 +268,14 @@ class BaseModel
       error "#{@table_name!} find_all must have a singular key to search"
 
     return {} if #ids == 0
-    flat_ids = concat [@db.escape_literal id for id in *ids], ", "
-    primary = @db.escape_identifier by_key
-    tbl_name = @db.escape_identifier @table_name!
 
-    query = fields .. " from #{tbl_name} where #{primary} in (#{flat_ids})"
+    @db.list ids
+    where = { [by_key]: @db.list ids }
+    if extra_where
+      for k,v in pairs extra_where
+        where[k] = v
 
-    if where
-      query ..= " and " .. @db.encode_clause where
+    query = "WHERE " .. @db.encode_clause where
 
     if clause
       if type(clause) == "table"
@@ -280,9 +284,7 @@ class BaseModel
 
       query ..= " " .. clause
 
-    if res = @db.select query
-      @load r for r in *res
-      res
+    @select query, fields: fields
 
   -- find by primary key, or by table of conds
   @find: (...) =>

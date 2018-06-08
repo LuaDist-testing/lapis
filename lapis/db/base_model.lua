@@ -338,15 +338,18 @@ do
     local param_count = select("#", ...)
     if param_count > 0 then
       local last = select(param_count, ...)
-      if type(last) == "table" then
+      if not self.db.is_encodable(last) then
         opts = last
+        param_count = param_count - 1
       end
     end
     if type(query) == "table" then
       opts = query
       query = ""
     end
-    query = self.db.interpolate_query(query, ...)
+    if param_count > 0 then
+      query = self.db.interpolate_query(query, ...)
+    end
     local tbl_name = self.db.escape_identifier(self:table_name())
     local load_as = opts and opts.load
     local fields = opts and opts.fields or "*"
@@ -427,7 +430,7 @@ do
       local tbl_name = self.db.escape_identifier(self:table_name())
       local find_by_escaped = self.db.escape_identifier(find_by)
       local query = tostring(fields) .. " from " .. tostring(tbl_name) .. " where " .. tostring(find_by_escaped) .. " in (" .. tostring(flat_ids) .. ")"
-      if opts and opts.where then
+      if opts and opts.where and next(opts.where) then
         query = query .. (" and " .. self.db.encode_clause(opts.where))
       end
       do
@@ -504,12 +507,10 @@ do
     if by_key == nil then
       by_key = self.primary_key
     end
-    local where = nil
-    local clause = nil
-    local fields = "*"
+    local extra_where, clause, fields
     if type(by_key) == "table" then
       fields = by_key.fields or fields
-      where = by_key.where
+      extra_where = by_key.where
       clause = by_key.clause
       by_key = by_key.key or self.primary_key
     end
@@ -519,22 +520,16 @@ do
     if #ids == 0 then
       return { }
     end
-    local flat_ids = concat((function()
-      local _accum_0 = { }
-      local _len_0 = 1
-      for _index_0 = 1, #ids do
-        local id = ids[_index_0]
-        _accum_0[_len_0] = self.db.escape_literal(id)
-        _len_0 = _len_0 + 1
+    self.db.list(ids)
+    local where = {
+      [by_key] = self.db.list(ids)
+    }
+    if extra_where then
+      for k, v in pairs(extra_where) do
+        where[k] = v
       end
-      return _accum_0
-    end)(), ", ")
-    local primary = self.db.escape_identifier(by_key)
-    local tbl_name = self.db.escape_identifier(self:table_name())
-    local query = fields .. " from " .. tostring(tbl_name) .. " where " .. tostring(primary) .. " in (" .. tostring(flat_ids) .. ")"
-    if where then
-      query = query .. (" and " .. self.db.encode_clause(where))
     end
+    local query = "WHERE " .. self.db.encode_clause(where)
     if clause then
       if type(clause) == "table" then
         assert(clause[1], "invalid clause")
@@ -542,16 +537,9 @@ do
       end
       query = query .. (" " .. clause)
     end
-    do
-      local res = self.db.select(query)
-      if res then
-        for _index_0 = 1, #res do
-          local r = res[_index_0]
-          self:load(r)
-        end
-        return res
-      end
-    end
+    return self:select(query, {
+      fields = fields
+    })
   end
   self.find = function(self, ...)
     local first = select(1, ...)

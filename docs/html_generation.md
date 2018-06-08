@@ -74,7 +74,7 @@ div {
 Will generate:
 
 ```html
-<html class="one two four">Hello world!</div>
+<div class="one two four">Hello world!</div>
 ```
 
 
@@ -154,7 +154,7 @@ with the same name as the action:
   render: true
 ```
 
-By default `views.` is appended to the front of the widget name and then loaded
+By default `views.` is prepended to the widget name and then loaded
 using Lua's `require` function. The `views` prefix can be customized by
 overwriting the `views_prefix` member of your application subclass:
 

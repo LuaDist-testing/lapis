@@ -8,161 +8,247 @@ import
   stub_request
   from require "lapis.spec.request"
 
-describe "application", ->
-  class App extends lapis.Application
-    "/hello": =>
+describe "lapis.spec.request", ->
+  describe "mock_request", ->
+    class App extends lapis.Application
+      "/hello": =>
 
-  it "should mock a request", ->
-    assert.same 200, (mock_request App, "/hello")
-    assert.has_error ->
-      mock_request App, "/world"
+    it "should mock a request", ->
+      assert.same 200, (mock_request App, "/hello")
+      assert.has_error ->
+        mock_request App, "/world"
 
-  it "should mock a request with double headers", ->
-    mock_request App, "/hello", {
-      method: "POST"
-      headers: {
-        ["Content-type"]: {
-          "hello"
-          "world"
+    it "should mock a request with double headers", ->
+      mock_request App, "/hello", {
+        method: "POST"
+        headers: {
+          ["Content-type"]: {
+            "hello"
+            "world"
+          }
         }
       }
-    }
 
--- tests a series of requests
-describe "session app", ->
-  class SessionApp extends lapis.Application
-    layout: false
+  describe "mock_action action", ->
+    it "should mock action", ->
+      assert.same "hello", mock_action lapis.Application, "/hello", {}, ->
+        "hello"
 
-    "/set_session/:value": =>
-      @session.hello = @params.value
-
-    "/get_session": =>
-      @session.hello
-
-  it "should set and read session", ->
-    _, _, h = assert_request SessionApp, "/set_session/greetings"
-    status, res = assert_request SessionApp, "/get_session", prev: h
-    assert.same "greetings", res
-
-describe "mock action", ->
-  it "should mock action", ->
-    assert.same "hello", mock_action lapis.Application, "/hello", {}, ->
-      "hello"
-
-describe "json request", ->
-  import json_params from require "lapis.application"
-
-  it "should parse json object body", ->
-    local res
+  describe "stub_request", ->
     class SomeApp extends lapis.Application
-      "/": json_params =>
-        res = @params.thing
+      [cool_page: "/cool/:name"]: =>
 
-    assert_request SomeApp, "/", {
-      headers: {
-        "content-type": "application/json"
-      }
-      body: '{"thing": 1234}'
-    }
+    it "should stub a request object", ->
+      req = stub_request SomeApp, "/"
+      assert.same "/cool/world", req\url_for "cool_page", name: "world"
 
-    assert.same 1234, res
+describe "lapis.request", ->
+  describe "session", ->
+    class SessionApp extends lapis.Application
+      layout: false
 
-  it "should parse json array body", ->
-    local res
-    class SomeApp extends lapis.Application
-      "/": json_params =>
-        res = @params
+      "/set_session/:value": =>
+        @session.hello = @params.value
 
-    assert_request SomeApp, "/", {
-      headers: {
-        "content-type": "application/json"
-      }
-      body: '[1,"hello", {}]'
-    }
+      "/get_session": =>
+        @session.hello
 
-    assert.same {1, "hello", {}}, res
-
-  it "should not fail on invalid json", ->
-    class SomeApp extends lapis.Application
-      "/": json_params =>
-
-    assert_request SomeApp, "/", {
-      headers: {
-        "content-type": "application/json"
-      }
-      body: 'helloworldland'
-    }
+    it "should set and read session", ->
+      _, _, h = assert_request SessionApp, "/set_session/greetings"
+      status, res = assert_request SessionApp, "/get_session", prev: h
+      assert.same "greetings", res
 
 
-describe "cookies", ->
-  class CookieApp extends lapis.Application
-    layout: false
-    "/": => @cookies.world = 34
+  describe "json request", ->
+    import json_params from require "lapis.application"
 
-    "/many": =>
-      @cookies.world = 454545
-      @cookies.cow = "one cool ;cookie"
+    it "should parse json object body", ->
+      local res
+      class SomeApp extends lapis.Application
+        "/": json_params =>
+          res = @params.thing
 
-  class CookieApp2 extends lapis.Application
-    layout: false
-    cookie_attributes: => "Path=/; Secure; Domain=.leafo.net;"
-    "/": => @cookies.world = 34
-
-  it "should write a cookie", ->
-    _, _, h = mock_request CookieApp, "/"
-    assert.same "world=34; Path=/; HttpOnly", h["Set-Cookie"]
-
-  it "should write multiple cookies", ->
-    _, _, h = mock_request CookieApp, "/many"
-
-    assert.same {
-      'cow=one%20cool%20%3bcookie; Path=/; HttpOnly'
-      'world=454545; Path=/; HttpOnly'
-    }, h["Set-Cookie"]
-
-  it "should write a cookie with cookie attributes", ->
-    _, _, h = mock_request CookieApp2, "/"
-    assert.same "world=34; Path=/; Secure; Domain=.leafo.net;", h["Set-Cookie"]
-
-  it "should set cookie attributes with lua app", ->
-    app = lapis.Application!
-    app.cookie_attributes = =>
-      "Path=/; Secure; Domain=.leafo.net;"
-
-    app\get "/", =>
-      @cookies.world = 34
-
-    _, _, h = mock_request app, "/"
-    assert.same "world=34; Path=/; Secure; Domain=.leafo.net;", h["Set-Cookie"]
-
-describe "500 error", ->
-  it "should render error page", ->
-    class ErrorApp extends lapis.Application
-      "/": =>
-        error "I am an error!"
-
-    assert.has_error ->
-      mock_request ErrorApp, "/"
-
-  it "should run custom error action", ->
-    class ErrorApp extends lapis.Application
-      handle_error: (err, msg) =>
-        r = @app.Request self, @req, @res
-        r\write {
-          status: 500
-          layout: false
-          content_type: "text/html"
-          "hello!"
+      assert_request SomeApp, "/", {
+        headers: {
+          "content-type": "application/json"
         }
-        r\render!
-        r
+        body: '{"thing": 1234}'
+      }
 
-      "/": => error "I am an error!"
+      assert.same 1234, res
 
-    status, body = mock_request ErrorApp, "/"
-    assert.same 500, status
-    assert.same "hello!", body
+    it "should parse json array body", ->
+      local res
+      class SomeApp extends lapis.Application
+        "/": json_params =>
+          res = @params
 
+      assert_request SomeApp, "/", {
+        headers: {
+          "content-type": "application/json"
+        }
+        body: '[1,"hello", {}]'
+      }
+
+      assert.same {1, "hello", {}}, res
+
+    it "should not fail on invalid json", ->
+      class SomeApp extends lapis.Application
+        "/": json_params =>
+
+      assert_request SomeApp, "/", {
+        headers: {
+          "content-type": "application/json"
+        }
+        body: 'helloworldland'
+      }
+
+  describe "write", ->
+    write = (fn, ...) ->
+      class A extends lapis.Application
+        layout: false
+        "/": fn
+
+      mock_request A, "/", ...
+
+    it "writes nothing, sets default content type", ->
+      status, body, h = write ->
+
+      assert.same 200, status
+      assert.same "", body
+      assert.same "text/html", h["Content-Type"]
+
+    it "writes status code", ->
+      status, body, h = write -> status: 420
+      assert.same 420, status
+
+    it "writes content type", ->
+      _, _, h = write -> content_type: "text/javascript"
+      assert.same "text/javascript", h["Content-Type"]
+
+    it "writes headers", ->
+      _, _, h = write -> {
+        headers: {
+          "X-Lapis-Cool": "zone"
+          "Cache-control": "nope"
+        }
+      }
+
+      assert.same "zone", h["X-Lapis-Cool"]
+      assert.same "nope", h["Cache-Control"]
+
+    it "does redirect", ->
+      status, _, h = write -> { redirect_to: "/hi" }
+
+      assert.same 302, status
+      assert.same "http://localhost/hi", h["Location"]
+
+    it "does permanent redirect", ->
+      status, _, h = write -> { redirect_to: "/loaf", status: 301 }
+
+      assert.same 301, status
+      assert.same "http://localhost/loaf", h["Location"]
+
+    it "writes string to buffer", ->
+      status, body, h = write -> "hello"
+      assert.same "hello", body
+
+    it "writes many things to buffer, with options", ->
+      status, body, h = write -> "hello", "world", status: 404
+      assert.same 404, status
+      assert.same "helloworld", body
+
+    it "writes json", ->
+      status, body, h = write -> json: { items: {1,2,3,4} }
+      assert.same [[{"items":[1,2,3,4]}]], body
+      assert.same "application/json", h["Content-Type"]
+
+  describe "cookies", ->
+    class CookieApp extends lapis.Application
+      layout: false
+      "/": => @cookies.world = 34
+
+      "/many": =>
+        @cookies.world = 454545
+        @cookies.cow = "one cool ;cookie"
+
+    class CookieApp2 extends lapis.Application
+      layout: false
+      cookie_attributes: => "Path=/; Secure; Domain=.leafo.net;"
+      "/": => @cookies.world = 34
+
+    it "should write a cookie", ->
+      _, _, h = mock_request CookieApp, "/"
+      assert.same "world=34; Path=/; HttpOnly", h["Set-Cookie"]
+
+    it "should write multiple cookies", ->
+      _, _, h = mock_request CookieApp, "/many"
+
+      assert.same {
+        'cow=one%20cool%20%3bcookie; Path=/; HttpOnly'
+        'world=454545; Path=/; HttpOnly'
+      }, h["Set-Cookie"]
+
+    it "should write a cookie with cookie attributes", ->
+      _, _, h = mock_request CookieApp2, "/"
+      assert.same "world=34; Path=/; Secure; Domain=.leafo.net;", h["Set-Cookie"]
+
+    it "should set cookie attributes with lua app", ->
+      app = lapis.Application!
+      app.cookie_attributes = =>
+        "Path=/; Secure; Domain=.leafo.net;"
+
+      app\get "/", =>
+        @cookies.world = 34
+
+      _, _, h = mock_request app, "/"
+      assert.same "world=34; Path=/; Secure; Domain=.leafo.net;", h["Set-Cookie"]
+
+  describe "layouts", ->
+    after_each = ->
+      package.loaded["views.another_layout"] = nil
+
+    it "renders without layout", ->
+      class LayoutApp extends lapis.Application
+        layout: "cool_layout"
+        "/": => "hello", layout: false
+
+      status, res = mock_request LayoutApp, "/"
+      assert.same "hello", res
+
+    it "renders with layout by name", ->
+      import Widget from require "lapis.html"
+      package.loaded["views.another_layout"] = class extends Widget
+        content: =>
+          text "*"
+          @content_for "inner"
+          text "^"
+
+      class LayoutApp extends lapis.Application
+        layout: "cool_layout"
+        "/": => "hello", layout: "another_layout"
+
+      status, res = mock_request LayoutApp, "/"
+      assert.same "*hello^", res
+
+    it "renders layout with class", ->
+      import Widget from require "lapis.html"
+
+      class Layout extends Widget
+        content: =>
+          text "("
+          @content_for "inner"
+          text ")"
+
+      class LayoutApp extends lapis.Application
+        layout: "cool_layout"
+        "/": =>
+          "hello", layout: Layout
+
+      status, res = mock_request LayoutApp, "/"
+      assert.same "(hello)", res
+
+-- these seem like an application spec and not a request one
 describe "before filter", ->
   it "should run before filter", ->
     local val
@@ -235,12 +321,4 @@ describe "before filter", ->
 
     assert_request app, "/"
     assert.same "yeah", val
-
-describe "stub_request", ->
-  class SomeApp extends lapis.Application
-    [cool_page: "/cool/:name"]: =>
-
-  it "should stub a request object", ->
-    req = stub_request SomeApp, "/"
-    assert.same "/cool/world", req\url_for "cool_page", name: "world"
 

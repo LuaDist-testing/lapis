@@ -235,6 +235,14 @@ has_one = function(self, name, opts)
       [foreign_key] = self[self.__class:primary_keys()]
     }
     do
+      local where = opts.where
+      if where then
+        for k, v in pairs(where) do
+          clause[k] = v
+        end
+      end
+    end
+    do
       local obj = model:find(clause)
       self[name] = obj
       return obj
@@ -247,6 +255,7 @@ has_one = function(self, name, opts)
     preload_opts.flip = true
     preload_opts.for_relation = name
     preload_opts.as = name
+    preload_opts.where = preload_opts.where or opts.where
     return model:include_in(objects, foreign_key, preload_opts)
   end
 end

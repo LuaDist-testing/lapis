@@ -143,6 +143,10 @@ has_one = (name, opts) =>
       [foreign_key]: @[@@primary_keys!]
     }
 
+    if where = opts.where
+      for k,v in pairs where
+        clause[k] = v
+
     with obj = model\find clause
       @[name] = obj
 
@@ -154,6 +158,7 @@ has_one = (name, opts) =>
     preload_opts.flip = true
     preload_opts.for_relation = name
     preload_opts.as = name
+    preload_opts.where or= opts.where
     model\include_in objects, foreign_key, preload_opts
 
 has_many = (name, opts) =>

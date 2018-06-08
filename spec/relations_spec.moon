@@ -166,6 +166,29 @@ describe "lapis.db.model.relations", ->
       'SELECT * from "user_data" where "owner_id" = 123 limit 1'
     }
 
+
+  it "should make has_one getter with where clause", ->
+    mock_query "SELECT", { { id: 101 } }
+
+    models.UserData = class extends Model
+
+    models.Users = class Users extends Model
+      @relations: {
+        {"data", has_one: "UserData", key: "owner_id", where: { state: "good"} }
+      }
+
+    user = Users!
+    user.id = 123
+    assert user\get_data!
+
+    assert_queries {
+      {
+        [[SELECT * from "user_data" where "owner_id" = 123 AND "state" = 'good' limit 1]]
+        [[SELECT * from "user_data" where "state" = 'good' AND "owner_id" = 123 limit 1]]
+      }
+    }
+
+
   it "should make has_many paginated getter", ->
     mock_query "SELECT", { { id: 101 } }
 
@@ -516,6 +539,33 @@ describe "lapis.db.model.relations", ->
       }
       assert_queries {
         [[SELECT a,b from "tags" where "post_id" in (123) order by b asc]]
+      }
+
+    it "preloads has_one with where", ->
+      mock_query "SELECT", {
+        { thing_id: 123, name: "whaz" }
+      }
+
+      models.Files = class Files extends Model
+
+      class Things extends Model
+        @relations: {
+          {"beta_file"
+            has_one: "Files"
+            where: { deleted: false }
+          }
+        }
+
+      thing = Things\load { id: 123 }
+      Things\preload_relations { thing }, "beta_file"
+
+      assert.same {
+        thing_id: 123
+        name: "whaz"
+      }, thing.beta_file
+
+      assert_queries {
+        [[SELECT * from "files" where "thing_id" in (123) and "deleted" = FALSE]]
       }
 
     it "preloads many relation with order and name", ->

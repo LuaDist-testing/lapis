@@ -9,12 +9,17 @@ that a URL must match. When you define a route you also include an *action*. An
 action is a regular Lua/MoonScript function that will be called if the
 associated route matches.
 
-All actions are called with one argument, a [*request
-object*](#request-object).
+All actions are invoked with one argument, a [*request
+object*](#request-object). The request object is where you'll store all the
+data you want to share between your actions and views. Additionally, the
+request object is your interface to the webserver on how the result is sent to
+the client.
 
 The return value of the action is used to render the output. A string return
-value will be rendered to the browser directly. A table return value
-will be used as the [*render options*](#render-options).
+value will be rendered to the browser directly. A table return value will be
+used as the [*render options*](#render-options). If there is more than one
+return value, all of them are merged into the final result. You can return both
+strings and tables to control the output.
 
 If there is no route that matches the request then the default route handler is
 executed, read more in [*application callbacks*](#application-callbacks).
@@ -106,41 +111,37 @@ be included in the named parameter. For example you can match URLs that end in
 
 Parentheses can be used to make a section of the route optional:
 
-```
-/projects/:username(/:project)
-```
+    /projects/:username(/:project)
 
 The above would match either `/projects/leafo`  or `/projects/leafo/lapis`. Any
 parameters within optional components that don't match will have a value of
 `nil` from within the action.
 
+These optional components can be nested and chained as much as you like:
+
+    /settings(/:username(/:page))(.:format)
+
 ### Parameter character classes
 
 A character class can be applied to a named parameter to restrict what
-characters can match. The syntax modeled after Lua's pattern character classes. This
-route will make sure the that `user_id` named parameter only contains digits:
+characters can match. The syntax modeled after Lua's pattern character classes.
+This route will make sure the that `user_id` named parameter only contains
+digits:
 
-```
-/user/:user_id[%d]/posts
-```
+    /user/:user_id[%d]/posts
 
 And this route would only match hexadecimal strings for the `hex` parameter.
 
-```
-/color/:hex[a-fA-F%d]
-```
-
+    /color/:hex[a-fA-F%d]
 
 ### Route precedence
 
-Routes are search in order of precedence first. Routes of the seame precdence
-are then search in the order that they are defined. The route precedence from
-highest to lowest is:
+Routes are searched first by precedence, then by the order they were defined.
+Route precedence from highest to lowest is:
 
 * Literal routes `/hello/world`
 * Variable routes `/hello/:variable`
 * Splat routes routes `/hello/*`
-
 
 ## Named Routes
 
@@ -184,7 +185,8 @@ class="for_lua">`self:url_for()`</span>. The first argument is the name of the
 route, and the second optional argument is a table of values to fill a
 parameterized route with.
 
-[Read more about `url_for`](#request-object-methods/url_for).
+[Read more about `url_for`](#request-object-methods/url_for) to see the
+different ways to generate URLs to pages.
 
 ## Handling HTTP verbs
 
@@ -382,10 +384,16 @@ The request object has the following parameters:
 * <span class="for_moon">`@app`</span><span class="for_lua">`self.app`</span> -- the instance of the application
 * <span class="for_moon">`@cookies`</span><span class="for_lua">`self.cookies`</span> -- the table of cookies, can be assigned to set new cookies. Only supports strings as values
 * <span class="for_moon">`@session`</span><span class="for_lua">`self.session`</span> -- signed session table. Can store values of any type that can be JSON encoded. Is backed by cookies
-* <span class="for_moon">`@options`</span><span class="for_lua">`self.options`</span> -- set of options that controls how the request is rendered to Nginx
-* <span class="for_moon">`@buffer`</span><span class="for_lua">`self.buffer`</span> -- the output buffer
 * <span class="for_moon">`@route_name`</span><span class="for_lua">`self.route_name`</span> -- the name of the route that matched the request if it has one
+* <span class="for_moon">`@options`</span><span class="for_lua">`self.options`</span> -- set of options that controls how the request is rendered, set via `write`
+* <span class="for_moon">`@buffer`</span><span class="for_lua">`self.buffer`</span> -- the output buffer, typically you'll not need to touch this manually, set via `write`
 
+Additionally the request object has the following methods:
+
+* `write(options, ...)` -- instructs the request how to render the result
+* `url_for(route, params, ...)` -- get the URL for a named route, or object
+* `build_url(path, params)` -- build a fully qualified URL from a path and parameters
+* `html(fn)` -- generate a string using the HTML builder syntax
 
 ### @req
 
@@ -436,8 +444,9 @@ end)
 ```
 
 ```moon
-"/sets-cookie": =>
-  @cookies.foo = "bar"
+class App extends lapis.Application
+  "/sets-cookie": =>
+    @cookies.foo = "bar"
 ```
 
 By default all cookies are given the additional attributes `Path=/; HttpOnly`
@@ -652,7 +661,7 @@ self:url_for("user_page", { username = "leafo", page = "code", format = "json" }
 @url_for "user_page", username: "leafo", page: "code", format: "json"
 ```
 
-If a route contains a splat, the value can be provieded via the parameter named
+If a route contains a splat, the value can be provided via the parameter named
 `splat`:
 
 ```lua
@@ -835,6 +844,7 @@ Here is the list of options that can be written
 * `render` -- causes a view to be rendered with the request. If the value is
   `true` then the name of the route is used as the view name. Otherwise the value must be a string or a view class.
 * `content_type` -- sets the `Content-type` header
+* `headers` -- a table of headers to add to the response
 * `json` -- causes the request to return the JSON encoded value of the property. The content type is set to `application/json` as well.
 * `layout` -- changes the layout from the default defined by the application
 * `redirect_to` -- sets status to 302 and sets `Location` header to value. Supports both relative and absolute URLs. (Combine with `status` to perform 301 redirect)
@@ -975,21 +985,40 @@ If you want to have your own error handling logic you can override the method
 `handle_error`:
 
 ```lua
+-- config.custom_error_page is made up for this example
 app.handle_error = function(self, err, trace)
-  ngx.log(ngx.NOTICE, "There was an error! " .. err .. ": " ..trace)
-  lapis.Application.handle_error(self, err, trace)
+  if config.custom_error_page then
+    return { render = "my_custom_error_page" }
+  else
+    return lapis.Application.handle_error(self, err, trace)
+  end
 end
 ```
 
 ```moon
+-- config.custom_error_page is made up for this example
 class App extends lapis.Application
   handle_error: (err, trace) =>
-    ngx.log ngx.NOTICE, "There was an error! #{err}: #{trace}"
-    super!
+    if config.custom_error_page
+      { render: "my_custom_error_page" }
+    else
+      super err, trace
 ```
 
-The [`lapis-exceptions`][2] module provides a default error handler that
-records errors in a database and can email you when they happen.
+The request object, or `self`, passed to the error handler is not the one that
+was created for the request that failed. Lapis provides a new one since the
+existing one maybe have been partially written to when it failed.
+
+You can access the original request object with <span
+class="for_moon">`@original_request`</span><span
+class="for_lua">`self.original_request`</span>
+
+Lapis' default error page shows an entire stack trace, so it's recommended to
+replace it with a custom one in your production envrionments, and log the
+exception in the background.
+
+The [`lapis-exceptions`][2] module augments the error handler to records errors
+in a database. It can also email you when there's an exception.
 
 [1]: http://www.lua.org/manual/5.1/manual.html#pdf-xpcall
 [2]: https://github.com/leafo/lapis-exceptions

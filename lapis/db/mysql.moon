@@ -10,6 +10,9 @@ import
   format_date
   is_raw
   raw
+  is_list
+  list
+  is_encodable
   from require "lapis.db.base"
 
 local conn, logger
@@ -154,6 +157,12 @@ escape_literal = (val) ->
       return val and "TRUE" or "FALSE"
     when "table"
       return "NULL" if val == NULL
+
+      if is_list val
+        escaped_items = [escape_literal item for item in *val[1]]
+        assert escaped_items[1], "can't flatten empty list"
+        return "(#{concat escaped_items, ", "})"
+
       return val[1] if is_raw val
       error "unknown table passed to `escape_literal`"
 
@@ -268,7 +277,9 @@ _truncate = (table) ->
 
 {
   :connect
-  :raw, :is_raw, :NULL, :TRUE, :FALSE,
+  :raw, :is_raw, :NULL, :TRUE, :FALSE
+  :list, :is_list
+  :is_encodable
 
   :encode_values
   :encode_assigns
