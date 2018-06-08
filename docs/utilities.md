@@ -713,11 +713,11 @@ Return a new function that will parse the body of the request as JSON and
 inject it into `@params` if the `content-type` is set to `application/json`.
 
 ```lua
-local json_params = requrie("lapis.application").json_params
+local json_params = require("lapis.application").json_params
 
 app:match("/json", json_params(function(self)
   return self.params.value
-end)
+end))
 ```
 
 ```moon
@@ -741,3 +741,5 @@ there was an error parsing the JSON then <span
 class="for_moon">`@json`</span><span class="for_lua">`self.json`</span> will be
 `nil` and the request will continue.
 
+
+[0]: exception_handling.html
