@@ -96,7 +96,8 @@ set_backend = (name="default", ...) ->
   assert(backends[name]) ...
 
 init_logger = ->
-  if ngx or os.getenv "LAPIS_SHOW_QUERIES"
+  config = require("lapis.config").get!
+  if ngx or os.getenv("LAPIS_SHOW_QUERIES") or config.show_queries
     logger = require "lapis.logging"
 
 init_db = ->
@@ -145,6 +146,18 @@ query = (str, ...) ->
 _select = (str, ...) ->
   query "SELECT " .. str, ...
 
+add_returning = (buff, first, cur, following, ...) ->
+  return unless cur
+
+  if first
+    append_all buff, " RETURNING "
+
+  append_all buff, escape_identifier cur
+
+  if following
+    append_all buff, ", "
+    add_returning buff, false, following, ...
+
 _insert = (tbl, values, ...) ->
   if values._timestamp
     values._timestamp = nil
@@ -160,12 +173,8 @@ _insert = (tbl, values, ...) ->
   }
   encode_values values, buff
 
-  returning = {...}
-  if next returning
-    append_all buff, " RETURNING "
-    for i, r in ipairs returning
-      append_all buff, escape_identifier r
-      append_all buff, ", " if i != #returning
+  if ...
+    add_returning buff, true, ...
 
   raw_query concat buff
 
@@ -192,6 +201,9 @@ _update = (table, values, cond, ...) ->
 
   if cond
     add_cond buff, cond, ...
+
+  if type(cond) == "table"
+    add_returning buff, true, ...
 
   raw_query concat buff
 
@@ -242,7 +254,7 @@ parse_clause = do
           char
       p * -alpha_num
 
-    balanced_parens = lpeg.P {
+    balanced_parens = P {
       P"(" * (V(1) + strings + (P(1) - ")"))^0  * P")"
     }
 

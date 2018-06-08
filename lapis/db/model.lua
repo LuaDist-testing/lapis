@@ -1,8 +1,8 @@
 local db = require("lapis.db")
-local underscore, escape_pattern, uniquify
+local underscore, escape_pattern, uniquify, get_fields
 do
   local _obj_0 = require("lapis.util")
-  underscore, escape_pattern, uniquify = _obj_0.underscore, _obj_0.escape_pattern, _obj_0.uniquify
+  underscore, escape_pattern, uniquify, get_fields = _obj_0.underscore, _obj_0.escape_pattern, _obj_0.uniquify, _obj_0.get_fields
 end
 local insert, concat
 do
@@ -12,7 +12,169 @@ end
 local cjson = require("cjson")
 local OffsetPaginator
 OffsetPaginator = require("lapis.db.pagination").OffsetPaginator
-local Model
+local singularize, Enum, enum, add_relations, Model
+singularize = function(name)
+  return name:match("^(.*)s$") or name
+end
+do
+  local _base_0 = {
+    for_db = function(self, key)
+      if type(key) == "string" then
+        return (assert(self[key], "enum does not contain key " .. tostring(key)))
+      elseif type(key) == "number" then
+        assert(self[key], "enum does not contain val " .. tostring(key))
+        return key
+      else
+        return error("don't know how to handle type " .. tostring(type(key)) .. " for enum")
+      end
+    end,
+    to_name = function(self, val)
+      if type(val) == "string" then
+        assert(self[val], "enum does not contain key " .. tostring(val))
+        return val
+      elseif type(val) == "number" then
+        local key = self[val]
+        return (assert(key, "enum does not contain val " .. tostring(val)))
+      else
+        return error("don't know how to handle type " .. tostring(type(val)) .. " for enum")
+      end
+    end
+  }
+  _base_0.__index = _base_0
+  local _class_0 = setmetatable({
+    __init = function() end,
+    __base = _base_0,
+    __name = "Enum"
+  }, {
+    __index = _base_0,
+    __call = function(cls, ...)
+      local _self_0 = setmetatable({}, _base_0)
+      cls.__init(_self_0, ...)
+      return _self_0
+    end
+  })
+  _base_0.__class = _class_0
+  Enum = _class_0
+end
+enum = function(tbl)
+  local keys
+  do
+    local _accum_0 = { }
+    local _len_0 = 1
+    for k in pairs(tbl) do
+      _accum_0[_len_0] = k
+      _len_0 = _len_0 + 1
+    end
+    keys = _accum_0
+  end
+  for _index_0 = 1, #keys do
+    local key = keys[_index_0]
+    tbl[tbl[key]] = key
+  end
+  return setmetatable(tbl, Enum.__base)
+end
+add_relations = function(self, relations)
+  for _index_0 = 1, #relations do
+    local relation = relations[_index_0]
+    local name = assert(relation[1], "missing relation name")
+    local fn_name = relation.as or "get_" .. tostring(name)
+    local assert_model
+    assert_model = function(source)
+      local models = require("models")
+      do
+        local m = models[source]
+        if not (m) then
+          error("failed to find model `" .. tostring(source) .. "` for relationship")
+        end
+        return m
+      end
+    end
+    do
+      local source = relation.fetch
+      if source then
+        assert(type(source) == "function", "Expecting function for `fetch` relation")
+        self.__base[fn_name] = function(self)
+          local existing = self[name]
+          if existing ~= nil then
+            return existing
+          end
+          do
+            local obj = source(self)
+            self[name] = obj
+            return obj
+          end
+        end
+      end
+    end
+    do
+      local source = relation.has_one
+      if source then
+        assert(type(source) == "string", "Expecting model name for `has_one` relation")
+        local column_name = tostring(name) .. "_id"
+        self.__base[fn_name] = function(self)
+          local existing = self[name]
+          if existing ~= nil then
+            return existing
+          end
+          local model = assert_model(source)
+          local clause = {
+            [relation.key or tostring(singularize(self.__class:table_name())) .. "_id"] = self[self.__class:primary_keys()]
+          }
+          do
+            local obj = model:find(clause)
+            self[name] = obj
+            return obj
+          end
+        end
+      end
+    end
+    do
+      local source = relation.belongs_to
+      if source then
+        assert(type(source) == "string", "Expecting model name for `belongs_to` relation")
+        local column_name = tostring(name) .. "_id"
+        self.__base[fn_name] = function(self)
+          local existing = self[name]
+          if existing ~= nil then
+            return existing
+          end
+          local model = assert_model(source)
+          do
+            local obj = model:find(self[column_name])
+            self[name] = obj
+            return obj
+          end
+        end
+      end
+    end
+    do
+      local source = relation.has_many
+      if source then
+        if relation.pager ~= false then
+          local foreign_key = relation.key
+          self.__base[fn_name] = function(self, opts)
+            local model = assert_model(source)
+            local clause = {
+              [foreign_key or tostring(singularize(self.__class:table_name())) .. "_id"] = self[self.__class:primary_keys()]
+            }
+            do
+              local where = relation.where
+              if where then
+                for k, v in pairs(where) do
+                  clause[k] = v
+                end
+              end
+            end
+            clause = db.encode_clause(clause)
+            return model:paginated("where " .. tostring(clause), opts)
+          end
+        else
+          error("not yet")
+        end
+      end
+    end
+  end
+end
 do
   local _base_0 = {
     _primary_cond = function(self)
@@ -73,7 +235,17 @@ do
         }
       end
       if next(columns) == nil then
-        return 
+        return nil, "nothing to update"
+      end
+      if self.__class.constraints then
+        for _, column in pairs(columns) do
+          do
+            local err = self.__class:_check_constraint(column, self[column], self)
+            if err then
+              return nil, err
+            end
+          end
+        end
       end
       local values
       do
@@ -84,16 +256,6 @@ do
         end
         values = _tbl_0
       end
-      if self.__class.constraints then
-        for key, value in pairs(values) do
-          do
-            local err = self.__class:_check_constraint(key, value, self)
-            if err then
-              return nil, err
-            end
-          end
-        end
-      end
       local nargs = select("#", ...)
       local last = nargs > 0 and select(nargs, ...)
       local opts
@@ -103,7 +265,29 @@ do
       if self.__class.timestamp and not (opts and opts.timestamp == false) then
         values._timestamp = true
       end
-      return db.update(self.__class:table_name(), values, cond)
+      local returning
+      for k, v in pairs(values) do
+        if db.is_raw(v) then
+          returning = returning or { }
+          table.insert(returning, k)
+        end
+      end
+      if returning then
+        do
+          local res = db.update(self.__class:table_name(), values, cond, unpack(returning))
+          do
+            local update = unpack(res)
+            if update then
+              for k, v in pairs(update) do
+                self[k] = v
+              end
+            end
+          end
+          return res
+        end
+      else
+        return db.update(self.__class:table_name(), values, cond)
+      end
     end,
     refresh = function(self, fields, ...)
       if fields == nil then
@@ -129,6 +313,9 @@ do
       local cond = db.encode_clause(self:_primary_cond())
       local tbl_name = db.escape_identifier(self.__class:table_name())
       local res = unpack(db.select(tostring(fields) .. " from " .. tostring(tbl_name) .. " where " .. tostring(cond)))
+      if not (res) then
+        error("failed to find row to refresh from, did the primary key change?")
+      end
       if field_names then
         for _index_0 = 1, #field_names do
           local field = field_names[_index_0]
@@ -163,6 +350,14 @@ do
   local self = _class_0
   self.timestamp = false
   self.primary_key = "id"
+  self.__inherited = function(self, child)
+    do
+      local r = child.relations
+      if r then
+        return add_relations(child, r)
+      end
+    end
+  end
   self.primary_keys = function(self)
     if type(self.primary_key) == "table" then
       return unpack(self.primary_key)
@@ -319,8 +514,7 @@ do
           if opts and opts.as then
             field_name = opts.as
           elseif flip then
-            local tbl = self:table_name()
-            field_name = tbl:match("^(.*)s$") or tbl
+            field_name = singularize(self:table_name())
           else
             field_name = foreign_key:match("^(.*)_" .. tostring(escape_pattern(self.primary_key)) .. "$")
           end
@@ -397,7 +591,7 @@ do
       end
     end
   end
-  self.create = function(self, values)
+  self.create = function(self, values, opts)
     if self.constraints then
       for key in pairs(self.constraints) do
         do
@@ -411,7 +605,31 @@ do
     if self.timestamp then
       values._timestamp = true
     end
-    local res = db.insert(self:table_name(), values, self:primary_keys())
+    local returning
+    if opts and opts.returning then
+      returning = {
+        self:primary_keys()
+      }
+      local _list_0 = opts.returning
+      for _index_0 = 1, #_list_0 do
+        local field = _list_0[_index_0]
+        table.insert(returning, field)
+      end
+    end
+    for k, v in pairs(values) do
+      if db.is_raw(v) then
+        returning = returning or {
+          self:primary_keys()
+        }
+        table.insert(returning, k)
+      end
+    end
+    local res
+    if returning then
+      res = db.insert(self:table_name(), values, unpack(returning))
+    else
+      res = db.insert(self:table_name(), values, self:primary_keys())
+    end
     if res then
       for k, v in pairs(res[1]) do
         values[k] = v
@@ -429,6 +647,9 @@ do
       t = {
         [name] = value
       }
+    end
+    if not (next(t)) then
+      error("missing constraint to check")
     end
     local cond = db.encode_clause(t)
     local table_name = db.escape_identifier(self:table_name())
@@ -467,5 +688,7 @@ do
   Model = _class_0
 end
 return {
-  Model = Model
+  Model = Model,
+  Enum = Enum,
+  enum = enum
 }

@@ -2,6 +2,7 @@
 db = require "lapis.db"
 
 import insert, concat from table
+import get_fields from require "lapis.util"
 
 query_parts = {"where", "group", "having", "order", "limit", "offset"}
 rebuild_query_clause = (parsed) ->
@@ -91,7 +92,7 @@ class OffsetPaginator extends Paginator
 
 
 class OrderedPaginator extends Paginator
-  order: "ASC"
+  order: "ASC" -- default sort order
   per_page: 10
 
   prepare_results: (...) -> ...
@@ -105,18 +106,32 @@ class OrderedPaginator extends Paginator
 
   each_page: =>
     coroutine.wrap ->
-      local page
+      tuple = {}
       while true
-        items, page = @get_page page
-        if next items
-          coroutine.yield items
+        tuple = { @get_page unpack tuple, 2 }
+        if next tuple[1]
+          coroutine.yield tuple[1]
         else
           break
 
-  get_page: (prev_pos) =>
+  get_page: (...) =>
+    @get_ordered @order, ...
+
+  after: (...) =>
+    @get_ordered "ASC", ...
+
+  before: (...) =>
+    @get_ordered "DESC", ...
+
+  get_ordered: (order, ...) =>
     parsed = db.parse_clause @_clause
 
-    field = db.escape_identifier @field
+    has_multi_fields = type(@field) == "table" and not db.is_raw @field
+
+    escaped_fields = if has_multi_fields
+      [db.escape_identifier f for f in *@field]
+    else
+      { db.escape_identifier @field }
 
     if parsed.order
       error "order should not be provided for #{@@__name}"
@@ -124,28 +139,38 @@ class OrderedPaginator extends Paginator
     if parsed.offset or parsed.limit
       error "offset and limit should not be provided for #{@@__name}"
 
-    parsed.order = "#{field} #{@order}"
+    parsed.order = table.concat ["#{f} #{order}" for f in *escaped_fields], ", "
 
-    if prev_pos
-      field_clause = switch @order\lower!
-        when "asc"
-          "#{field} > #{db.escape_literal prev_pos}"
-        when "desc"
-          "#{field} < #{db.escape_literal prev_pos}"
-        else
-          error "don't know how to handle order #{@order}"
+    if ...
+      positions = {...}
+      orders = for i, pos in ipairs positions
+        field = escaped_fields[i]
+        switch order\lower!
+          when "asc"
+            "#{field} > #{db.escape_literal pos}"
+          when "desc"
+            "#{field} < #{db.escape_literal pos}"
+          else
+            error "don't know how to handle order #{order}"
+
+      order_clause = table.concat orders, " and "
 
       if parsed.where
-        parsed.where = "#{field_clause} and (#{parsed.where})"
+        parsed.where = "#{order_clause} and (#{parsed.where})"
       else
-        parsed.where = field_clause
+        parsed.where = order_clause
 
     parsed.limit = tostring @per_page
     query = rebuild_query_clause parsed
 
-    res = @model\select query, opts
-    final = res[#res]
-    @.prepare_results(res), final and final[@model.primary_key]
+    res = @model\select query, @opts
 
+    final = res[#res]
+    res = @.prepare_results(res)
+
+    if has_multi_fields
+      res, get_fields final, unpack @field
+    else
+      res, get_fields final, @field
 
 { :OffsetPaginator, :OrderedPaginator, :Paginator}

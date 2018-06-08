@@ -100,7 +100,8 @@ set_backend = function(name, ...)
 end
 local init_logger
 init_logger = function()
-  if ngx or os.getenv("LAPIS_SHOW_QUERIES") then
+  local config = require("lapis.config").get()
+  if ngx or os.getenv("LAPIS_SHOW_QUERIES") or config.show_queries then
     logger = require("lapis.logging")
   end
 end
@@ -160,6 +161,20 @@ local _select
 _select = function(str, ...)
   return query("SELECT " .. str, ...)
 end
+local add_returning
+add_returning = function(buff, first, cur, following, ...)
+  if not (cur) then
+    return 
+  end
+  if first then
+    append_all(buff, " RETURNING ")
+  end
+  append_all(buff, escape_identifier(cur))
+  if following then
+    append_all(buff, ", ")
+    return add_returning(buff, false, following, ...)
+  end
+end
 local _insert
 _insert = function(tbl, values, ...)
   if values._timestamp then
@@ -174,17 +189,8 @@ _insert = function(tbl, values, ...)
     " "
   }
   encode_values(values, buff)
-  local returning = {
-    ...
-  }
-  if next(returning) then
-    append_all(buff, " RETURNING ")
-    for i, r in ipairs(returning) do
-      append_all(buff, escape_identifier(r))
-      if i ~= #returning then
-        append_all(buff, ", ")
-      end
-    end
+  if ... then
+    add_returning(buff, true, ...)
   end
   return raw_query(concat(buff))
 end
@@ -212,6 +218,9 @@ _update = function(table, values, cond, ...)
   encode_assigns(values, buff)
   if cond then
     add_cond(buff, cond, ...)
+  end
+  if type(cond) == "table" then
+    add_returning(buff, true, ...)
   end
   return raw_query(concat(buff))
 end
@@ -281,7 +290,7 @@ do
       end
       return p * -alpha_num
     end
-    local balanced_parens = lpeg.P({
+    local balanced_parens = P({
       P("(") * (V(1) + strings + (P(1) - ")")) ^ 0 * P(")")
     })
     local order_by = ci("order") * some_white * ci("by") / "order"

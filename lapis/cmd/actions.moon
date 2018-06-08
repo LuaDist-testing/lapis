@@ -32,6 +32,10 @@ path = annotate path, {
 
 write_file_safe = (file, content) ->
   return if path.exists file
+
+  if prefix = file\match "^(.+)/[^/]+$"
+    path.mkdir prefix unless path.exists prefix
+
   path.write_file file, content
 
 fail_with_message = (msg) ->
@@ -196,19 +200,29 @@ tasks = {
     help: "run migrations"
 
     (environment=default_environment!) ->
-      import attach_server from require "lapis.cmd.nginx"
+      env = require "lapis.environment"
+      env.push environment, show_queries: true
 
-      unless get_pid!
-        print colors "%{green}Using temporary server..."
+      migrations = require "lapis.db.migrations"
+      migrations.run_migrations require "migrations"
 
+      env.pop!
+  }
 
-      server = attach_server environment
-      print server\exec [[
-        local migrations = require("lapis.db.migrations")
-        migrations.create_migrations_table()
-        migrations.run_migrations(require("migrations"))
-      ]]
-      server\detach!
+  {
+    name: "generate"
+    usage: "generate template [args...]"
+    help: "generates a new file from template"
+
+    (template_name, ...) ->
+      tpl = require "lapis.cmd.templates.#{template_name}"
+      unless type(tpl) == "table"
+        error "invalid template: #{template_name}"
+
+      tpl.check_args ...
+      out = tpl.content ...
+      fname = tpl.filename ...
+      write_file_safe fname, out
   }
 
   {

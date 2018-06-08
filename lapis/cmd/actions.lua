@@ -49,6 +49,14 @@ write_file_safe = function(file, content)
   if path.exists(file) then
     return 
   end
+  do
+    local prefix = file:match("^(.+)/[^/]+$")
+    if prefix then
+      if not (path.exists(prefix)) then
+        path.mkdir(prefix)
+      end
+    end
+  end
   return path.write_file(file, content)
 end
 local fail_with_message
@@ -254,17 +262,28 @@ tasks = {
       if environment == nil then
         environment = default_environment()
       end
-      local attach_server
-      attach_server = require("lapis.cmd.nginx").attach_server
-      if not (get_pid()) then
-        print(colors("%{green}Using temporary server..."))
+      local env = require("lapis.environment")
+      env.push(environment, {
+        show_queries = true
+      })
+      local migrations = require("lapis.db.migrations")
+      migrations.run_migrations(require("migrations"))
+      return env.pop()
+    end
+  },
+  {
+    name = "generate",
+    usage = "generate template [args...]",
+    help = "generates a new file from template",
+    function(template_name, ...)
+      local tpl = require("lapis.cmd.templates." .. tostring(template_name))
+      if not (type(tpl) == "table") then
+        error("invalid template: " .. tostring(template_name))
       end
-      local server = attach_server(environment)
-      print(server:exec([[        local migrations = require("lapis.db.migrations")
-        migrations.create_migrations_table()
-        migrations.run_migrations(require("migrations"))
-      ]]))
-      return server:detach()
+      tpl.check_args(...)
+      local out = tpl.content(...)
+      local fname = tpl.filename(...)
+      return write_file_safe(fname, out)
     end
   },
   {
