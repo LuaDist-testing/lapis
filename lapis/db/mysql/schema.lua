@@ -48,7 +48,7 @@ entity_exists = function(name)
   local database = escape_literal(assert(mysql_config.database))
   name = escape_literal(name)
   local res = unpack(db.select("COUNT(*) as c from information_schema.tables where\n    table_schema = " .. tostring(database) .. " and table_name = " .. tostring(name) .. " LIMIT 1"))
-  return res.c > 0
+  return tonumber(res.c) > 0
 end
 local create_table
 create_table = function(name, columns, opts)
@@ -264,7 +264,8 @@ local types = setmetatable({
   datetime = C("DATETIME"),
   boolean = C("TINYINT", {
     length = 1
-  })
+  }),
+  enum = C("TINYINT UNSIGNED")
 }, {
   __index = function(self, key)
     return error("Don't know column type `" .. tostring(key) .. "`")

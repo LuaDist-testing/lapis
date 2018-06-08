@@ -12,6 +12,15 @@ do
 end
 local insert
 insert = table.insert
+local get_time
+get_time = function(config)
+  if ngx then
+    ngx.update_time()
+    return ngx.now()
+  elseif config.server == "cqueues" then
+    return require("cqueues").monotime()
+  end
+end
 local Request
 do
   local _class_0
@@ -139,7 +148,19 @@ do
     end,
     load_cookies = function(self)
       self.cookies = auto_table(function()
-        return parse_cookie_string(self.req.headers.cookie)
+        local cookie = self.req.headers.cookie
+        if type(cookie) == "table" then
+          local out = { }
+          for _index_0 = 1, #cookie do
+            local str = cookie[_index_0]
+            for k, v in pairs(parse_cookie_string(str)) do
+              out[k] = v
+            end
+          end
+          return out
+        else
+          return parse_cookie_string(cookie)
+        end
       end)
     end,
     load_session = function(self)
@@ -206,8 +227,7 @@ do
         end
         local start_time
         if config.measure_performance then
-          ngx.update_time()
-          start_time = ngx.now()
+          start_time = get_time(config)
         end
         local view = widget(self.options.locals)
         if self.layout_opts then
@@ -216,8 +236,8 @@ do
         view:include_helper(self)
         self:write(view)
         if start_time then
-          ngx.update_time()
-          increment_perf("view_time", ngx.now() - start_time)
+          local t = get_time(config)
+          increment_perf("view_time", t - start_time)
         end
       end
       if layout then
@@ -231,8 +251,7 @@ do
         end
         local start_time
         if config.measure_performance then
-          ngx.update_time()
-          start_time = ngx.now()
+          start_time = get_time(config)
         end
         self.layout_opts._content_for_inner = self.layout_opts._content_for_inner or function()
           return raw(inner)
@@ -241,8 +260,8 @@ do
         layout:include_helper(self)
         layout:render(self.buffer)
         if start_time then
-          ngx.update_time()
-          increment_perf("layout_time", ngx.now() - start_time)
+          local t = get_time(config)
+          increment_perf("layout_time", t - start_time)
         end
       end
       if next(self.buffer) then
@@ -281,7 +300,7 @@ do
           local curr = self.params
           for match in k:gmatch("%[(.-)%]") do
             local new = curr[front]
-            if new == nil then
+            if type(new) ~= "table" then
               new = { }
               curr[front] = new
             end

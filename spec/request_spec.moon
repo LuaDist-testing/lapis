@@ -92,6 +92,14 @@ describe "lapis.request", ->
       -- todo: this is bug
       assert.same {}, params
 
+    it "parses params with [] and overlapping name", ->
+      assert.same 200, (mock_request QueryApp, "/hello?p=a&p=b&p[1]=b")
+      assert.same {
+        p: {
+          "1": "b"
+        }
+      }, params
+
   describe "json request", ->
     import json_params from require "lapis.application"
 
@@ -203,47 +211,155 @@ describe "lapis.request", ->
       assert.same "application/json; charset=utf-8", h["Content-Type"]
       assert.same [[{"item":"hi"}]], body
 
-
   describe "cookies", ->
-    class CookieApp extends lapis.Application
-      layout: false
-      "/": => @cookies.world = 34
+    describe "read", ->
+      class PrintCookieApp extends lapis.Application
+        "/": =>
+          @cookies.hi
+          json: getmetatable(@cookies).__index
 
-      "/many": =>
-        @cookies.world = 454545
-        @cookies.cow = "one cool ;cookie"
+      it "should return empty with no cookie header", ->
+        _, res = mock_request PrintCookieApp, "/", {
+          expect: "json"
+          headers: { }
+        }
 
-    class CookieApp2 extends lapis.Application
-      layout: false
-      cookie_attributes: => "Path=/; Secure; Domain=.leafo.net;"
-      "/": => @cookies.world = 34
+        assert.same { }, res
 
-    it "should write a cookie", ->
-      _, _, h = mock_request CookieApp, "/"
-      assert.same "world=34; Path=/; HttpOnly", h["Set-Cookie"]
+      it "should read basic cookie", ->
+        _, res = mock_request PrintCookieApp, "/", {
+          expect: "json"
+          headers: {
+            cookie: "hello=world"
+          }
+        }
 
-    it "should write multiple cookies", ->
-      _, _, h = mock_request CookieApp, "/many"
+        assert.same {
+          hello: "world"
+        }, res
+
+      it "should merge cookies when there are multiple headers", ->
+        _, res = mock_request PrintCookieApp, "/", {
+          expect: "json"
+          headers: {
+            cookie: {
+              "hello=world; one=two"
+              "zone=man; one=five"
+              "a=b"
+            }
+          }
+        }
+
+        assert.same {
+          a: "b"
+          one: "five"
+          hello: "world"
+          zone: "man"
+        }, res
+
+    describe "write", ->
+      class CookieApp extends lapis.Application
+        layout: false
+        "/": => @cookies.world = 34
+
+        "/many": =>
+          @cookies.world = 454545
+          @cookies.cow = "one cool ;cookie"
+
+      class CookieApp2 extends lapis.Application
+        layout: false
+        cookie_attributes: => "Path=/; Secure; Domain=.leafo.net;"
+        "/": => @cookies.world = 34
+
+      it "should write a cookie", ->
+        _, _, h = mock_request CookieApp, "/"
+        assert.same "world=34; Path=/; HttpOnly", h["Set-Cookie"]
+
+      it "should write multiple cookies", ->
+        _, _, h = mock_request CookieApp, "/many"
+
+        assert.same {
+          'cow=one%20cool%20%3bcookie; Path=/; HttpOnly'
+          'world=454545; Path=/; HttpOnly'
+        }, h["Set-Cookie"]
+
+      it "should write a cookie with cookie attributes", ->
+        _, _, h = mock_request CookieApp2, "/"
+        assert.same "world=34; Path=/; Secure; Domain=.leafo.net;", h["Set-Cookie"]
+
+      it "should set cookie attributes with lua app", ->
+        app = lapis.Application!
+        app.cookie_attributes = =>
+          "Path=/; Secure; Domain=.leafo.net;"
+
+        app\get "/", =>
+          @cookies.world = 34
+
+        _, _, h = mock_request app, "/"
+        assert.same "world=34; Path=/; Secure; Domain=.leafo.net;", h["Set-Cookie"]
+
+
+  describe "csrf", ->
+    csrf = require "lapis.csrf"
+
+    it "verifies csrf token", ->
+      import capture_errors_json, respond_to from require "lapis.application"
+
+      class CsrfApp extends lapis.Application
+        "/form": capture_errors_json respond_to {
+          GET: =>
+            json: {
+              csrf_token: csrf.generate_token @
+            }
+
+          POST: =>
+            csrf.assert_token @
+            json: { success: true }
+        }
+
+      _, res, h = mock_request CsrfApp, "/form", {
+        expect: "json"
+      }
+
+      assert res.csrf_token, "missing csrf token"
+      assert h.set_cookie, "missing cookie"
+
+      _, post_res = mock_request CsrfApp, "/form", {
+        post: {
+          csrf_token: res.csrf_token
+        }
+        expect: "json"
+        prev: h
+      }
+
+      assert.same { success: true }, post_res
+
+      -- no cookie set, fails
+      _, post_res = mock_request CsrfApp, "/form", {
+        post: {
+          csrf_token: res.csrf_token
+        }
+        expect: "json"
+      }
 
       assert.same {
-        'cow=one%20cool%20%3bcookie; Path=/; HttpOnly'
-        'world=454545; Path=/; HttpOnly'
-      }, h["Set-Cookie"]
+        errors: {
+          "csrf: missing token cookie"
+        }
+      }, post_res
 
-    it "should write a cookie with cookie attributes", ->
-      _, _, h = mock_request CookieApp2, "/"
-      assert.same "world=34; Path=/; Secure; Domain=.leafo.net;", h["Set-Cookie"]
+      -- no token, fails
+      _, post_res = mock_request CsrfApp, "/form", {
+        post: { }
+        expect: "json"
+      }
 
-    it "should set cookie attributes with lua app", ->
-      app = lapis.Application!
-      app.cookie_attributes = =>
-        "Path=/; Secure; Domain=.leafo.net;"
+      assert.same {
+        errors: {
+          "missing csrf token"
+        }
+      }, post_res
 
-      app\get "/", =>
-        @cookies.world = 34
-
-      _, _, h = mock_request app, "/"
-      assert.same "world=34; Path=/; Secure; Domain=.leafo.net;", h["Set-Cookie"]
 
   describe "layouts", ->
     after_each = ->

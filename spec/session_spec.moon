@@ -1,11 +1,4 @@
 
--- without nginx the library uses crypto
-unless (pcall require, "crypto") or (pcall require, "openssl")
-  describe "lapis.session", ->
-    it "should have luacrypto or luaossl", ->
-      pending "luacrypto or luaossl is required for session test"
-  return
-
 import auto_table from require "lapis.util"
 
 session = require "lapis.session"
@@ -32,6 +25,20 @@ describe "lapis.session", ->
     assert.same expected_err, err
     assert.same expected, sess
 
+  -- this is to make sure the session format doesn't accidentally change and break all sessions
+  it "reads from the current session format", ->
+    res = assert session.get_session {
+      cookies: {
+        lapis_session: [[eyJjYXIiOiJlbmdpbmUiLCJoZWxsbyI6IndvcmxkIn0=
+--jXFBL3aIDxK/deWWpUeO92/ftEo=]]
+      }
+    }
+
+    assert.same {
+      car: "engine"
+      hello: "world"
+    }, res
+
   it "writes and reads unsigned session", ->
     config.secret = nil
     assert session.write_session req
@@ -44,7 +51,7 @@ describe "lapis.session", ->
     config.secret = nil
     session.write_session req
     config.secret = "hello"
-    assert_session nil, "missing secret"
+    assert_session nil, "session: invalid format"
 
   it "writes and reads signed session", ->
     session.write_session req
@@ -58,16 +65,16 @@ describe "lapis.session", ->
   it "doesn't read signed session when there is no secret", ->
     session.write_session req
     config.secret = nil
-    assert_session nil, "rejecting signed session"
+    assert_session nil, "invalid session serialization"
 
   it "rejects incorrect secret", ->
     session.write_session req
     config.secret = "not-the-secret"
-    assert_session nil, "invalid secret"
+    assert_session nil, "session: invalid signature"
 
   it "rejects malformed signed session", ->
     req.cookies.lapis_session = "uhhhh"
-    assert_session nil, "missing secret"
+    assert_session nil, "session: invalid format"
 
   it "rejects malformed unsigned session", ->
     config.secret = nil

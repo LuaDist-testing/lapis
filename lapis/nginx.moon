@@ -21,6 +21,9 @@ parse_multipart = ->
       when "body"
         table.insert current.content, res
       when "header"
+        unless type(res) == "table"
+          return nil, err or "failed to read upload header"
+
         name, value = unpack res
         if name\lower! == "content-disposition"
           if params = parse_content_disposition value
@@ -64,6 +67,11 @@ ngx_req = {
   remote_addr: -> ngx.var.remote_addr
   request_uri: ->  ngx.var.request_uri
 
+  read_body_as_string: ->
+    =>
+      ngx.req.read_body!
+      ngx.req.get_body_data!
+
   parsed_url: (t) ->
     uri = ngx.var.request_uri
     pos = uri\find("?")
@@ -77,7 +85,6 @@ ngx_req = {
       port: host_header and host_header\match ":(%d+)$"
       query: ngx.var.args
     }
-
 
   params_post: (t) ->
     content_type = t.headers["content-type"] or ""
@@ -94,7 +101,8 @@ ngx_req = {
       else
         ngx.req.get_post_args!
 
-      flatten_params args
+      if args
+        flatten_params args
 
     params or {}
 
@@ -104,7 +112,10 @@ ngx_req = {
     else
       ngx.req.get_uri_args!
 
-    flatten_params args
+    if args
+      flatten_params args
+    else
+      {}
 }
 
 lazy_tbl = (tbl, index) ->

@@ -10,6 +10,13 @@ import parse_cookie_string, to_json, build_url, auto_table from require "lapis.u
 
 import insert from table
 
+get_time = (config) ->
+  if ngx
+    ngx.update_time!
+    ngx.now!
+  elseif config.server == "cqueues"
+    require("cqueues").monotime!
+
 class Request
   @__inherited: (child) =>
     -- add inheritance to support methods
@@ -28,7 +35,17 @@ class Request
       parsed
 
     load_cookies: =>
-      @cookies = auto_table -> parse_cookie_string @req.headers.cookie
+      @cookies = auto_table ->
+        cookie = @req.headers.cookie
+
+        if type(cookie) == "table"
+          out = {}
+          for str in *cookie
+            for k,v in pairs parse_cookie_string str
+              out[k] = v
+          out
+        else
+          parse_cookie_string cookie
 
     load_session: =>
       @session = session.lazy_session @
@@ -83,8 +100,7 @@ class Request
           widget = require "#{@app.views_prefix}.#{widget}"
 
         start_time = if config.measure_performance
-          ngx.update_time!
-          ngx.now!
+          get_time config
 
         view = widget @options.locals
         @layout_opts.view_widget = view if @layout_opts
@@ -92,8 +108,8 @@ class Request
         @write view
 
         if start_time
-          ngx.update_time!
-          increment_perf "view_time", ngx.now! - start_time
+          t = get_time config
+          increment_perf "view_time", t - start_time
 
       if layout
         inner = @buffer
@@ -105,8 +121,7 @@ class Request
           layout
 
         start_time = if config.measure_performance
-          ngx.update_time!
-          ngx.now!
+          get_time config
 
         @layout_opts._content_for_inner or= -> raw inner
 
@@ -115,8 +130,8 @@ class Request
         layout\render @buffer
 
         if start_time
-          ngx.update_time!
-          increment_perf "layout_time", ngx.now! - start_time
+          t = get_time config
+          increment_perf "layout_time", t - start_time
 
       if next @buffer
         content = table.concat @buffer
@@ -146,9 +161,10 @@ class Request
           curr = @params
           for match in k\gmatch "%[(.-)%]"
             new = curr[front]
-            if new == nil
+            if type(new) != "table"
               new = {}
               curr[front] = new
+
             curr = new
             front = match
           curr[front] = v

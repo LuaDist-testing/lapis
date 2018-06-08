@@ -144,13 +144,22 @@ key_filter = (tbl, ...) ->
     tbl[k] = nil unless set[k]
   tbl
 
+encodable_userdata = {
+  [json.null]: true
+}
+
+if json.empty_array
+  encodable_userdata[json.empty_array] = true
+
 json_encodable = (obj, seen={}) ->
   switch type obj
     when "table"
       unless seen[obj]
         seen[obj] = true
         { k, json_encodable(v) for k,v in pairs(obj) when type(k) == "string" or type(k) == "number" }
-    when "function", "userdata", "thread"
+    when "userdata"
+      encodable_userdata[obj] and obj
+    when "function", "thread"
       nil
     else
       obj
@@ -262,7 +271,10 @@ time_ago_in_words = do
       out ..= ", " if #out > 0
       out ..= val .. " " .. word
 
-    out .. " " .. suffix
+    if suffix and suffix != ""
+      out .. " " .. suffix
+    else
+      out
 
 title_case = (str) ->
   (str\gsub "%S+", (chunk) ->
@@ -375,7 +387,16 @@ get_fields = (obj, key, ...) ->
 
 singularize = (name) ->
   -- TODO: not very good
-  (name\gsub("ies$", "y")\gsub("oes$", "o")\gsub("s$", ""))
+  out = name\gsub("ies$", "y")\gsub("oes$", "o")
+
+  out = if out\sub(-4, -1) == "sses"
+    out\gsub("sses$", "ss")
+  else
+    out\gsub("s$", "")
+
+  out
+
+
 
 { :unescape, :escape, :escape_pattern, :parse_query_string,
   :parse_content_disposition, :parse_cookie_string, :encode_query_string,

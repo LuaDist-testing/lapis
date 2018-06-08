@@ -29,3 +29,4 @@ make mysql_test_db
 ./busted -o utfTerminal
 ./busted -o utfTerminal spec_postgres/
 ./busted -o utfTerminal spec_openresty/
+./busted -o utfTerminal spec_cqueues/

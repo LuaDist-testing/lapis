@@ -1,27 +1,40 @@
-import NginxRunner from require "lapis.cmd.nginx"
-runner = NginxRunner base_path: "spec_openresty/s1/"
+
+import runner from require "lapis.cmd.cqueues"
 
 import SpecServer from require "lapis.spec.server"
 server = SpecServer runner
 
 describe "server", ->
   setup ->
-    server\load_test_server!
+    server\load_test_server {
+      app_class: "spec_cqueues.s1.app"
+    }
 
   teardown ->
     server\close_test_server!
 
   it "should request basic page", ->
-    status, res = server\request "/"
+    status, res, headers = server\request "/"
     assert.same 200, status
+    assert.same [[<!DOCTYPE HTML><html lang="en"><head><title>Lapis Page</title></head><body>Welcome to Lapis 1.7.0</body></html>]], res
+
+    assert.same {
+      content_type: "text/html"
+      connection: "close"
+    }, headers
 
   it "should request json page", ->
-    status, res = server\request "/world", {
+    status, res, headers = server\request "/world", {
       expect: "json"
     }
 
     assert.same 200, status
     assert.same { success: true }, res
+
+    assert.same {
+      content_type: "application/json"
+      connection: "close"
+    }, headers
 
   describe "params", ->
     it "dumps query params", ->
@@ -190,4 +203,6 @@ describe "server", ->
 
       assert.same {success: true}, res
       assert.nil res.headers
+
+
 

@@ -72,7 +72,6 @@ validation functions as demonstrated in the example above.
 ## Validation Functions
 
 * `exists: true` -- check if the value exists and is not an empty string
-* `file_exists: true` -- check if the value is a file upload
 * `matches_pattern: pat` -- value is a string that matches the Lua pattern provided by `pat`
 * `min_length: Min_Length` -- value must be at least `Min_Length` chars
 * `max_length: Max_Length` -- value must be at most `Max_Length` chars
@@ -83,6 +82,24 @@ validation functions as demonstrated in the example above.
 * `type: String` -- type of value is equal to String
 * `one_of: {A, B, C, ...}` -- value is equal to one of the elements in the array table
 
+## Optional validations
+
+You can set `optional` to true for a validation to make it validate only when
+some value is provided. If the parameter's value is `nil`, then the validation
+will skip it without failure.
+
+```lua
+validate.assert_valid(self.params, {
+  { "color", exists = true, min_length = 2, max_length = 25, optional = true },
+})
+
+```
+
+```moon
+assert_valid @params, {
+  { "color", exists: true, min_length: 2, max_length: 25, optional: true },
+}
+```
 
 ## Creating a Custom Validator
 

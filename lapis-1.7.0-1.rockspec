@@ -1,17 +1,17 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "lapis"
-version = "1.6.0-1"
+version = "1.7.0-1"
 
 -- LuaDist source
 source = {
-  tag = "1.6.0-1",
+  tag = "1.7.0-1",
   url = "git://github.com/LuaDist-testing/lapis.git"
 }
 -- Original source
 -- source = {
 -- 	url = "git://github.com/leafo/lapis.git",
--- 	branch = "v1.6.0"
+-- 	branch = "v1.7.0"
 -- }
 
 description = {
@@ -48,18 +48,19 @@ build = {
 		["lapis.cmd.cqueues"] = "lapis/cmd/cqueues.lua",
 		["lapis.cmd.cqueues.actions"] = "lapis/cmd/cqueues/actions.lua",
 		["lapis.cmd.cqueues.attached_server"] = "lapis/cmd/cqueues/attached_server.lua",
+		["lapis.cmd.cqueues.templates.config"] = "lapis/cmd/cqueues/templates/config.lua",
 		["lapis.cmd.nginx"] = "lapis/cmd/nginx.lua",
 		["lapis.cmd.nginx.actions"] = "lapis/cmd/nginx/actions.lua",
 		["lapis.cmd.nginx.attached_server"] = "lapis/cmd/nginx/attached_server.lua",
 		["lapis.cmd.nginx.config"] = "lapis/cmd/nginx/config.lua",
+		["lapis.cmd.nginx.templates.config"] = "lapis/cmd/nginx/templates/config.lua",
+		["lapis.cmd.nginx.templates.config_etlua"] = "lapis/cmd/nginx/templates/config_etlua.lua",
+		["lapis.cmd.nginx.templates.mime_types"] = "lapis/cmd/nginx/templates/mime_types.lua",
 		["lapis.cmd.path"] = "lapis/cmd/path.lua",
 		["lapis.cmd.templates.app"] = "lapis/cmd/templates/app.lua",
 		["lapis.cmd.templates.app_lua"] = "lapis/cmd/templates/app_lua.lua",
-		["lapis.cmd.templates.config"] = "lapis/cmd/templates/config.lua",
-		["lapis.cmd.templates.config_etlua"] = "lapis/cmd/templates/config_etlua.lua",
 		["lapis.cmd.templates.flow"] = "lapis/cmd/templates/flow.lua",
 		["lapis.cmd.templates.gitignore"] = "lapis/cmd/templates/gitignore.lua",
-		["lapis.cmd.templates.mime_types"] = "lapis/cmd/templates/mime_types.lua",
 		["lapis.cmd.templates.model"] = "lapis/cmd/templates/model.lua",
 		["lapis.cmd.templates.models"] = "lapis/cmd/templates/models.lua",
 		["lapis.cmd.templates.models_lua"] = "lapis/cmd/templates/models_lua.lua",
@@ -91,6 +92,7 @@ build = {
 		["lapis.http"] = "lapis/http.lua",
 		["lapis.logging"] = "lapis/logging.lua",
 		["lapis.lua"] = "lapis/lua.lua",
+		["lapis.moonscript.widget_optimizer"] = "lapis/moonscript/widget_optimizer.lua",
 		["lapis.nginx"] = "lapis/nginx.lua",
 		["lapis.nginx.cache"] = "lapis/nginx/cache.lua",
 		["lapis.nginx.context"] = "lapis/nginx/context.lua",

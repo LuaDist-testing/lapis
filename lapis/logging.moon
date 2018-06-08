@@ -29,10 +29,12 @@ flatten_params_helper = (params, out = {}, sep= ", ")->
 flatten_params = (params) ->
   table.concat flatten_params_helper params
 
-query = (q) ->
-  l = config.logging
-  return unless l and l.queries
-  print colors("%{bright}%{cyan}SQL: %{reset}%{magenta}#{q}%{reset}")
+query = do
+  log_tpl = colors("%{bright}%{cyan}SQL: %{reset}%{magenta}%s%{reset}")
+  (q) ->
+    l = config.logging
+    return unless l and l.queries
+    print log_tpl\format q
 
 request = (r) ->
   l = config.logging
@@ -58,11 +60,13 @@ request = (r) ->
   cmd = "#{req.cmd_mth} #{req.cmd_url}"
   print colors(t)\format status, cmd, flatten_params r.url_params
 
-migration = (name) ->
-  print colors("%{bright}%{yellow}Migrating: %{reset}%{green}#{name}%{reset}")
+migration = do
+  log_tpl = colors("%{bright}%{yellow}Migrating: %{reset}%{green}%s%{reset}")
+  (name) -> print log_tpl\format name
 
-notice = (msg) ->
-  print colors("%{bright}%{yellow}Notice: %{reset}#{msg}")
+notice = do
+  log_tpl = colors("%{bright}%{yellow}Notice: %{reset}%s")
+  (msg) -> print log_tpl\format msg
 
 migration_summary = (count) ->
   noun = if count == 1
@@ -72,10 +76,12 @@ migration_summary = (count) ->
 
   print colors("%{bright}%{yellow}Ran%{reset} #{count} %{bright}%{yellow}#{noun}")
 
-start_server = (port) ->
+start_server = (port, environment_name) ->
   l = config.logging
   return unless l and l.server
   print colors("%{bright}%{yellow}Listening on port #{port}%{reset}")
+  if environment_name
+    print colors("%{bright}%{yellow}Environment: #{environment_name}%{reset}")
 
 { :request, :query, :migration, :migration_summary, :notice, :flatten_params,
   :start_server }

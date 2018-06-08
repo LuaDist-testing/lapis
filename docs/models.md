@@ -901,7 +901,7 @@ assert(Users:create({
 ```
 
 ```moon
-import Model from require "lapis.db.models"
+import Model from require "lapis.db.model"
 
 class Users extends Model
   @constraints: {
@@ -1276,8 +1276,12 @@ results_2 = pager\get_page last_user_id, last_post_id
 ```
 
 ```sql
-SELECT * from "some_model" order by "some_model"."user_id" ASC, "some_model"."post_id" ASC limit 10
-SELECT * from "some_model" where ("some_model"."user_id", "some_model"."post_id") > (232, 582) order by "some_model"."user_id" ASC, "some_model"."post_id" ASC limit 10
+SELECT * from "some_model"
+  order by "some_model"."user_id" ASC, "some_model"."post_id" ASC limit 10
+
+SELECT * from "some_model" where
+  ("some_model"."user_id", "some_model"."post_id") > (232, 582)
+  order by "some_model"."user_id" ASC, "some_model"."post_id" ASC limit 10
 ```
 
 ## Relations
@@ -1297,7 +1301,7 @@ local Posts = Model:extend("posts", {
 ```
 
 ```moon
-import Model from require "lapis.db.models"
+import Model from require "lapis.db.model"
 class Posts extends Model
   @relations: {
     {"user", belongs_to: "Users"}
@@ -1357,7 +1361,7 @@ local Posts = Model:extend("posts", {
 ```
 
 ```moon
-import Model from require "lapis.db.models"
+import Model from require "lapis.db.model"
 
 class Posts extends Model
   @relations: {
@@ -1386,6 +1390,10 @@ If the relation returns `nil` from the database, then that will be cached on
 the model and subsequent calls will return `nil` without issuing another query.
 You can call the `refresh` method to clear the relation caches.
 
+A variation of the `belongs_to` relation is
+[`polymorphic_belongs_to`](#relations/polymorphic-belongs-to), which lets a
+relation point to one of many different models.
+
 ### `has_one`
 
 A relation that fetches a single related model. Similar to `belongs_to`, but
@@ -1403,7 +1411,7 @@ local Users = Model:extend("users", {
 ```
 
 ```moon
-import Model from require "lapis.db.models"
+import Model from require "lapis.db.model"
 class Users extends Model
   @relations: {
     {"user_profile", has_one: "UserProfiles"}
@@ -1440,7 +1448,7 @@ local Users = Model:extend("users", {
 ```
 
 ```moon
-import Model from require "lapis.db.models"
+import Model from require "lapis.db.model"
 
 class Users extends Model
   @relations: {
@@ -1480,7 +1488,7 @@ local Users = Model:extend("users", {
 ```
 
 ```moon
-import Model from require "lapis.db.models"
+import Model from require "lapis.db.model"
 class Users extends Model
   @relations: {
     {"posts", has_many: "Posts"}
@@ -1552,7 +1560,7 @@ local Users = Model:extend("users", {
 ```
 
 ```moon
-import Model from require "lapis.db.models"
+import Model from require "lapis.db.model"
 class Users extends Model
   @relations: {
     {"authored_posts"
@@ -1592,7 +1600,7 @@ local Users = Model:extend("users", {
 ```
 
 ```moon
-import Model from require "lapis.db.models"
+import Model from require "lapis.db.model"
 class Users extends Model
   @relations: {
     {"recent_posts", fetch: =>
@@ -1601,6 +1609,158 @@ class Users extends Model
   }
 ```
 
+
+`fetch` relations can also provide a preloader to allow for the data to be
+loaded over an array of objects. The preloader function recieves as arguments:
+the array table of objects to preload, the current mode, the name of the
+relation.
+
+The preloader is responsible for setting the loaded value on each object. The
+`name` argument is the name of the field that the value should be stored in on
+each instance.  All of the instances will be marked as having the relation
+loaded, regardless of if you set a value or not. This means that future calls
+to `get_` will return the cached value.
+
+
+```lua
+local Model = require("lapis.db.model").Model
+
+local Users = Model:extend("users", {
+  relations = {
+    {"recent_posts",
+      fetch = function(self)
+        -- fetch some data
+      end,
+      preload = function(objs)
+        -- preload the data on objs
+      end,
+    }
+  }
+})
+```
+
+```moon
+import Model from require "lapis.db.model"
+class Users extends Model
+  @relations: {
+    {"recent_posts"
+      fetch: =>
+        -- fetch some data
+      preload: (objs) ->
+        -- preload the data on all objs
+    }
+  }
+```
+
+
+### `polymorphic_belongs_to`
+
+A relation that fetches a single related model that can be one of multiple
+models. For example, you might have a `Purchases` model that is associated with
+the object that was bought, which could be one of many types: `VideoGames`,
+`Books`. The related models are fetched up by their primary key.
+
+The type of the related object is stored in an [`enum` field](#enum)
+automatically created during relation initialization. The `enum` is named after
+the type of the relation, suffixed with `_type`. The string values in the
+`enum` are the names of the tables.
+
+The syntax for creating a `polymorphic_belongs_to` takes the type's id with the
+name of the model class it points to. Integers are used to represent types.
+Just like `enum`, it's recommended to explicitly write the integer keys to make
+it clear that they can't be reordered without changing the meaning of the
+relation.
+
+
+```lua
+local Model = require("lapis.db.model").Model
+
+local Purchases = Model:extend("purchases", {
+  relations = {
+    {"object", polymorphic_belongs_to = {
+      [1] = "Users",
+      [2] = "Books",
+    }},
+  }
+})
+```
+
+```moon
+import Model from require "lapis.db.model"
+
+class Posts extends Model
+  @relations: {
+    {"user", polymorphic_belongs_to: {
+      [1]: "Users"
+      [2]: "Books"
+    }}
+  }
+```
+
+In the example above, an `enum` named `object_types` is created. Note that is
+uses the table names, instead of the class names. It is equivalent to:
+
+
+```lua
+Purchases.object_types = enum {
+  users = 1,
+  books = 2
+}
+```
+
+```moon
+Purchases.object_types = enum {
+  users: 1
+  books: 2
+}
+```
+
+The following methods are automatically generated on the model class with the
+polymorphic relation: (where `#{name}` is the name of the relation)
+
+* `model_for_#{name}_type(type)` -- Takes the integer or name from type `enum` and returns the model class associated to that type. If the class could not be found an error is raised
+* `#{name}_type_for_model(model)` -- Takes a model and returns the `enum` type for it (as integer)
+* `#{name}_type_for_object(obj)` -- Takes an instances of an object and returns the `enum` type for it (as integer)
+
+
+A *getter* instance method is added to the model:
+
+* `get_#{name}` -- Will fetch and return the associated object. This will only perform a query if the relation has not already been fetched or preloaded. `nil` will be returned if no object could be found, or the foreign key is `nil`
+
+Additionally, a preloader is installed into the model that will allow all
+associated objects across all the different tables to be loaded efficiently.
+
+#### Migrating for a New Polymorphic Relation
+
+When adding a `polymorphic_belongs_to` to one of your tables you need to make
+the appropriate columns. You'll need to create a foreign key column along with
+the type column. The type column can use the built-in schema type `enum`.
+
+The column names are named after the relation. For example, if your relation is
+called `primary_item`, columns should be created with the names
+`primary_item_id` and `primary_item_type`. 
+
+
+```lua
+local schema = require("lapis.db.schema")
+
+return {
+  [1368686109] = function()
+    schema.add_column("purchases", "primary_item_id", schema.types.foreign_key)
+    schema.add_column("purchases", "primary_item_type", schema.types.enum)
+  end,
+}
+```
+
+```moon
+import add_column, create_index, types from require "lapis.db.schema"
+
+{
+  [1368686109]: =>
+    add_column "purchases", "primary_item_id", types.foreign_key
+    add_column "purchases", "primary_item_type", types.enum
+}
+```
 
 ## Preloading relations
 
@@ -1617,11 +1777,11 @@ ahead of time in a single query before iterating over them.
 
 
 ```lua
-local preload = require("lapis.db.models").preload
+local preload = require("lapis.db.model").preload
 ```
 
 ```moon
-import preload from require "lapis.db.models"
+import preload from require "lapis.db.model"
 ```
 
 The `preload` function is a general purpose preloading for loading relations on
@@ -1669,7 +1829,7 @@ local Posts = Model:extend("posts", {
 ```
 
 ```moon
-import Model from require "lapis.db.models"
+import Model from require "lapis.db.model"
 
 class Posts extends Model
   @relations: {

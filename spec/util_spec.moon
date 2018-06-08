@@ -144,6 +144,15 @@ tests = {
     }
   }
 
+  { -- encoding null values
+    ->
+      util.to_json {
+        nothing: json.null
+      }
+
+    '{"nothing":null}'
+  }
+
   {
     ->
       util.build_url {
@@ -410,6 +419,9 @@ describe "lapis.util", ->
 
       {"heroes", "hero"}
       {"torpedoes", "torpedo"}
+      {"purchases", "purchase"}
+      {"addresses", "address"}
+      {"responses", "response"}
 
       -- these will never work
       -- {"halves", "half"}

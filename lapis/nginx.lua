@@ -33,6 +33,9 @@ parse_multipart = function()
     if "body" == _exp_0 then
       table.insert(current.content, res)
     elseif "header" == _exp_0 then
+      if not (type(res) == "table") then
+        return nil, err or "failed to read upload header"
+      end
       local name, value = unpack(res)
       if name:lower() == "content-disposition" then
         do
@@ -107,6 +110,12 @@ local ngx_req = {
   request_uri = function()
     return ngx.var.request_uri
   end,
+  read_body_as_string = function()
+    return function(self)
+      ngx.req.read_body()
+      return ngx.req.get_body_data()
+    end
+  end,
   parsed_url = function(t)
     local uri = ngx.var.request_uri
     local pos = uri:find("?")
@@ -140,7 +149,9 @@ local ngx_req = {
           args = ngx.req.get_post_args()
         end
       end
-      params = flatten_params(args)
+      if args then
+        params = flatten_params(args)
+      end
     end
     return params or { }
   end,
@@ -154,7 +165,11 @@ local ngx_req = {
         args = ngx.req.get_uri_args()
       end
     end
-    return flatten_params(args)
+    if args then
+      return flatten_params(args)
+    else
+      return { }
+    end
   end
 }
 local lazy_tbl

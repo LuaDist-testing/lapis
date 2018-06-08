@@ -156,17 +156,21 @@ do
     end,
     dispatch = function(self, req, res)
       local err, trace, r
-      local success = xpcall((function()
+      local capture_error
+      capture_error = function(_err)
+        err = _err
+        trace = debug.traceback("", 2)
+      end
+      local raw_request
+      raw_request = function()
         r = self.Request(self, req, res)
         if not (self.router:resolve(req.parsed_url.path, r)) then
           local handler = self:wrap_handler(self.default_route)
           handler({ }, nil, "default_route", r)
         end
         return self:render_request(r)
-      end), function(_err)
-        err = _err
-        trace = debug.traceback("", 2)
-      end)
+      end
+      local success = xpcall(raw_request, capture_error)
       if not (success) then
         local error_request = self.Request(self, req, res)
         error_request.original_request = r
@@ -440,14 +444,12 @@ json_params = function(fn)
       local content_type = self.req.headers["content-type"]
       if content_type then
         if string.find(content_type:lower(), "application/json", nil, true) then
-          ngx.req.read_body()
-          local obj
-          pcall(function()
-            local err
-            obj, err = json.decode(ngx.req.get_body_data())
+          local body = self.req:read_body_as_string()
+          local success, obj_or_err = pcall(function()
+            return json.decode(body)
           end)
-          if obj then
-            self.__class.support.add_params(self, obj, "json")
+          if success then
+            self.__class.support.add_params(self, obj_or_err, "json")
           end
         end
       end

@@ -1,12 +1,12 @@
 # Lapis
 
-A web framework for Lua/[MoonScript][1].
+A web framework for Lua/[MoonScript][1] supporting [OpenResty](https://openresty.org/en/) or [http.server](https://github.com/daurnimator/lua-http)
 
 [![Build Status](https://travis-ci.org/leafo/lapis.svg?branch=master)](https://travis-ci.org/leafo/lapis)
 
 Lapis is production ready, use it on your next huge project.
 
-### <http://leafo.net/lapis/>
+Learn more on the homepage: <http://leafo.net/lapis/>
 
 * [Getting Started Tutorial](http://leafo.net/lapis/reference/getting_started.html)
 * [Documentation](http://leafo.net/lapis/reference.html)
@@ -14,13 +14,15 @@ Lapis is production ready, use it on your next huge project.
 
 ## Lapis Powered
 
-  * <http://luarocks.org> - [source](https://github.com/leafo/moonrocks-site)
-  * <http://itch.io>
-  * <http://streak.club> - [source](https://github.com/leafo/streak.club)
-  * <http://mundodescuento.com/>
+  * <https://luarocks.org> - [source](https://github.com/leafo/moonrocks-site)
+  * <https://itch.io>
+  * <https://streak.club> - [source](https://github.com/leafo/streak.club)
+  * <https://sightreading.training> - [source](https://github.com/leafo/sightreading.training)
   * [Ludum Dare game browser](http://ludumdare.itch.io) - [source](https://github.com/leafo/ludum-dare-browser)
   * <https://pasta.cf/> - [source](https://github.com/starius/pasta)
   * <http://lapchan.moe/> - [source](https://github.com/karai17/lapis-chan/)
+
+Made a website in Lapis? [Tell us](https://github.com/leafo/lapis/issues)
 
 ## Running Tests
 
@@ -45,7 +47,7 @@ make mysql_test_db
 
 ## License (MIT)
 
-Copyright (C) 2017 by Leaf Corcoran
+Copyright (C) 2018 by Leaf Corcoran
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
