@@ -7,6 +7,7 @@ path = require "lapis.cmd.path"
 colors = require "ansicolors"
 
 path = path\annotate!
+set_path = (p) -> path = p
 
 write_file_safe = (file, content) ->
   return nil, "file already exists: #{file}" if path.exists file
@@ -57,8 +58,10 @@ actions = {
 
       if flags.lua
         write_file_safe "app.lua", require "lapis.cmd.templates.app_lua"
+        write_file_safe "models.lua", require "lapis.cmd.templates.models_lua"
       else
         write_file_safe "app.moon", require "lapis.cmd.templates.app"
+        write_file_safe "models.moon", require "lapis.cmd.templates.models"
 
       if flags.git
         write_file_safe ".gitignore", require("lapis.cmd.templates.gitignore") flags
@@ -274,5 +277,5 @@ execute = (args) ->
 
     os.exit 1
 
-{ :actions, :execute, :get_action, :parse_flags }
+{ :actions, :execute, :get_action, :parse_flags, :set_path }
 

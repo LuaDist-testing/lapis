@@ -1,3 +1,6 @@
+{
+  title: "Models"
+}
 
 # Models
 
@@ -451,9 +454,10 @@ relation.
 
 ### `include_in(model_instances, column_name, opts={})`
 
-Queries instances of the current model and loads them into an array of other
-models. This is used to preload relations in a single query. Read more in
-[Preloading Association](#preloading-associations)
+Finds instances of the current model and loads them into an array containing
+instances of another model. This is used to preload relations in a single
+query. Returns the `model_instances` array table. Read more in [Preloading
+Associations](#preloading-associations)
 
 ### `paginated(query, ...)`
 
@@ -769,6 +773,11 @@ instance of the `Users` model. The first argument of `include_in` is the array
 table of model instances. The second argument is the column name of the foreign
 key found in the array of model instances that maps to the primary key of the
 class calling the `include_in`.
+
+`include_in` is a low level way of loading associated rows. Whenever possible
+you should opt to use relations and `preload_relation` instead, it will save
+you the trouble of remembering what arguments you need to pass to `include_in`.
+Read more about [preloading relations](#preloading-relations).
 
 The name of the inserted property is derived from the name of the foreign key.
 In this case, `user` was derived from the foreign key `user_id`. If we want to
@@ -1149,10 +1158,9 @@ class Posts extends Model
   }
 ```
 
-Relations will automatically add methods to models to make fetching the
-associated model instances easy. For example the `belongs_to` relation from the
-example above would make a `get_user` method:
-
+Lapis will automatically add a handful of methods for reach relation to the
+model class to make fetching the associated row easy.  For example the
+`belongs_to` relation from the example above would make a `get_user` method:
 
 ```lua
 local post = Posts:find(1)
@@ -1227,6 +1235,10 @@ SELECT * from "users" where "user_id" = 123;
 The relation definition can take an optional `key` option to override what
 field is used on the current model to reference as the foreign key.
 
+If the relation returns `nil` from the database, then that will be cached on
+the model and subsequent calls will return `nil` without issuing another query.
+You can call the `refresh` method to clear the relation caches.
+
 ### `has_one`
 
 A relation that fetches a single related model. Similar to `belongs_to`, but
@@ -1300,6 +1312,10 @@ profile = user\get_user_profile!
 ```sql
 SELECT * from "user_profiles" where "owner_id" = 123;
 ```
+
+If the relation returns `nil` from the database, then that will be cached on
+the model and subsequent calls will return `nil` without issuing another query.
+You can call the `refresh` method to clear the relation caches.
 
 ### `has_many`
 
@@ -1438,6 +1454,78 @@ class Users extends Model
   }
 ```
 
+## Preloading relations
+
+In addtion to the method to fetch the associated rows on a single model
+instace, relations also provide a way to preload the rows for mmany instances
+of the model. For an explanation of why preloading rows is necessary, read
+the [Preloading associations](#preloading-associations) guide.
+
+### `preload_relation(instances, name, ...)`
+
+The class method `preload_relation` takes an array table of instances of the
+model, and the name of a relation. It fills all the instances with the
+associated models with a single query. It's equivalent to calling `include_in`
+with the options that match the relation definition.
+
+If any of the relations return `nil`, the loaded flag is set on the instace so
+calling the `get_` method does not trigger another query.
+
+Any additional arguments are merged in the options to the call to `include_in`.
+
+
+```lua
+local Model = require("lapis.db.model").Model
+
+local Posts = Model:extend("posts", {
+  relations = {
+    {"user", belongs_to = "Users"}
+  }
+})
+```
+
+```moon
+import Model from require "lapis.db.models"
+
+class Posts extends Model
+  @relations: {
+    {"user", belongs_to: "Users"}
+  }
+```
+
+A `get_` method is added to the model to fetch the associated row:
+
+```lua
+local posts = Posts:select() -- select all the posts
+-- load the user on all the posts
+Posts:preload_relation(posts, "user")
+```
+
+```moon
+posts = Posts\select! -- select all the posts
+-- load the user for all th posts
+Posts\preload_relation posts, "user"
+```
+
+```sql
+SELECT * from "users" where "id" in (3,4,5,6,7);
+```
+
+### `preload_relations(instances, names...)`
+
+`preload_relations` is a helper method for calling `preload_relation` many
+times with different relations. This form does not support passing any options
+to the preloaders.
+
+```lua
+-- load three separate relations
+Posts:preload_relations(posts, "user", "tags", "category")
+```
+
+```moon
+-- load three separate relations
+Posts\preload_relations posts, "user", "tags", "category"
+```
 
 ## Enum
 

@@ -1,5 +1,6 @@
-title: Lapis Console
---
+{
+  title: "Lapis Console"
+}
 # Lapis Console
 
 [Lapis Console][1] is a separate project that adds an interactive console to
@@ -14,7 +15,7 @@ debugging.
 Install through LuaRocks:
 
 ```bash
-$ luarocks install --server=http://rocks.moonscript.org lapis-console
+$ luarocks install lapis-console
 ```
 
 ## Creating A Console

@@ -1,17 +1,17 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "lapis"
-version = "1.3.2-1"
+version = "1.4.0-1"
 
 -- LuaDist source
 source = {
-  tag = "1.3.2-1",
+  tag = "1.4.0-1",
   url = "git://github.com/LuaDist-testing/lapis.git"
 }
 -- Original source
 -- source = {
 -- 	url = "git://github.com/leafo/lapis.git",
--- 	branch = "v1.3.2"
+-- 	branch = "v1.4.0",
 -- }
 
 description = {
@@ -55,6 +55,8 @@ build = {
 		["lapis.cmd.templates.gitignore"] = "lapis/cmd/templates/gitignore.lua",
 		["lapis.cmd.templates.mime_types"] = "lapis/cmd/templates/mime_types.lua",
 		["lapis.cmd.templates.model"] = "lapis/cmd/templates/model.lua",
+		["lapis.cmd.templates.models"] = "lapis/cmd/templates/models.lua",
+		["lapis.cmd.templates.models_lua"] = "lapis/cmd/templates/models_lua.lua",
 		["lapis.cmd.templates.spec"] = "lapis/cmd/templates/spec.lua",
 		["lapis.cmd.templates.tup"] = "lapis/cmd/templates/tup.lua",
 		["lapis.cmd.util"] = "lapis/cmd/util.lua",

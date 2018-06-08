@@ -6,6 +6,7 @@ import require, type, setmetatable, rawget, assert, pairs, unpack, error, next f
 cjson = require "cjson"
 
 import OffsetPaginator from require "lapis.db.pagination"
+import add_relations, mark_loaded_relations from require "lapis.db.model.relations"
 
 class Enum
   debug = =>
@@ -39,29 +40,6 @@ enum = (tbl) ->
 
   setmetatable tbl, Enum.__base
 
--- class Things extends Model
---   @relations: {
---     {"user", has_one: "Users"}
---     {"posts", has_many: "Posts", pager: true, order: "id ASC"}
---   }
-add_relations = (relations) =>
-  relation_builders = require "lapis.db.model.relations"
-
-  for relation in *relations
-    name = assert relation[1], "missing relation name"
-    built = false
-
-    for k in pairs relation
-      if builder = relation_builders[k]
-        builder @, name, relation
-        built = true
-        break
-
-    continue if built
-
-    import flatten_params from require "lapis.logging"
-    error "don't know how to create relation `#{flatten_params relation}`"
-
 class BaseModel
   @db: nil -- set in implementing class
 
@@ -69,7 +47,7 @@ class BaseModel
   @primary_key: "id"
 
   @__inherited: (child) =>
-    if r = child.relations
+    if r = rawget child, "relations"
       add_relations child, r, @db
 
   @get_relation_model: (name) =>
@@ -194,6 +172,7 @@ class BaseModel
     fields = opts and opts.fields or "*"
     flip = opts and opts.flip
     many = opts and opts.many
+    value_fn = opts and opts.value
 
     if not flip and type(@primary_key) == "table"
       error "#{@table_name!} must have singular primary key for include_in"
@@ -220,6 +199,12 @@ class BaseModel
       if opts and opts.where
         query ..= " and " .. @db.encode_clause opts.where
 
+      if order = many and opts.order
+        query ..= " order by #{order}"
+
+      if group = opts and opts.group
+        query ..= " group by #{group}"
+
       if res = @db.select query
         records = {}
         if many
@@ -229,10 +214,16 @@ class BaseModel
             if records[t_key] == nil
               records[t_key] = {}
 
-            insert records[t_key], @load t
+            row = @load t
+            row = value_fn row if value_fn
+
+            insert records[t_key], row
         else
           for t in *res
-            records[t[find_by]] = @load t
+            row = @load t
+            row = value_fn row if value_fn
+
+            records[t[find_by]] = row
 
         field_name = if opts and opts.as
           opts.as
@@ -248,6 +239,12 @@ class BaseModel
 
         for other in *other_records
           other[field_name] = records[other[src_key]]
+
+          if many and not other[field_name]
+            other[field_name] = {}
+
+        if for_relation = opts and opts.for_relation
+          mark_loaded_relations other_records, for_relation
 
     other_records
 
@@ -330,11 +327,16 @@ class BaseModel
   -- alternative to MoonScript inheritance
   @extend: (table_name, tbl={}) =>
     lua = require "lapis.lua"
-    with cls = lua.class table_name, tbl, @
-      .table_name = -> table_name
-      .primary_key = tbl.primary_key
-      .timestamp = tbl.timestamp
-      .constraints = tbl.constraints
+
+    class_fields = {
+      "primary_key", "timestamp", "constraints", "relations"
+    }
+
+    lua.class table_name, tbl, @, (cls) ->
+      cls.table_name = -> table_name
+      for f in *class_fields
+        cls[f] = tbl[f]
+        cls.__base[f] = nil
 
   _primary_cond: =>
     cond = {}
@@ -395,4 +397,4 @@ class BaseModel
 
     @
 
-{ :BaseModel, :Enum, :enum, :add_relations }
+{ :BaseModel, :Enum, :enum }

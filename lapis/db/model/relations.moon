@@ -15,11 +15,62 @@ find_relation = (model, name) ->
   if p = model.__parent
     find_relation p, name
 
+preload_relation = (objects, name, ...) =>
+  preloader = @relation_preloaders[name]
+  preloader @, objects, ...
+  true
+
+preload_relations = (objects, name, ...) =>
+  preloader = @relation_preloaders[name]
+  unless preloader
+    error "Model #{@__name} doesn't have preloader for #{name}"
+
+  preloader @, objects
+
+  if ...
+    @preload_relations objects, ...
+  else
+    true
+
+mark_loaded_relations = (items, name) ->
+  for item in *items
+    if loaded = item[LOADED_KEY]
+      loaded[name] = true
+    else
+      item[LOADED_KEY] = { [name]: true }
+
 clear_loaded_relation = (item, name) ->
   item[name] = nil
   if loaded = item[LOADED_KEY]
     loaded[name] = nil
   true
+
+get_relations_class = (model) ->
+  parent = model.__parent
+  unless parent
+    error "model does not have parent class"
+
+  if rawget parent, "_relations_class"
+    return parent
+
+  preloaders = {}
+  if inherited = parent.relation_preloaders
+    setmetatable preloaders, __index: inherited
+
+  relations_class = class extends model.__parent
+    @__name: "#{model.__name}Relations"
+    @_relations_class: true
+
+    @relation_preloaders: preloaders
+
+    @preload_relations: preload_relations
+    @preload_relation: preload_relation
+
+    clear_loaded_relation: clear_loaded_relation
+
+  model.__parent = relations_class
+  setmetatable model.__base, relations_class.__base
+  relations_class
 
 fetch = (name, opts) =>
   source = opts.fetch
@@ -62,6 +113,12 @@ belongs_to = (name, opts) =>
     with obj = model\find @[column_name]
       @[name] = obj
 
+  @relation_preloaders[name] = (objects, preload_opts) =>
+    model = assert_model @@, source
+    preload_opts or= {}
+    preload_opts.for_relation = name
+    model\include_in objects, column_name, preload_opts
+
 has_one = (name, opts) =>
   source = opts.has_one
   assert type(source) == "string", "Expecting model name for `has_one` relation"
@@ -88,6 +145,16 @@ has_one = (name, opts) =>
 
     with obj = model\find clause
       @[name] = obj
+
+  @relation_preloaders[name] = (objects, preload_opts) =>
+    model = assert_model @@, source
+    foreign_key = opts.key or "#{@@singular_name!}_id"
+
+    preload_opts or= {}
+    preload_opts.flip = true
+    preload_opts.for_relation = name
+    preload_opts.as = name
+    model\include_in objects, foreign_key, preload_opts
 
 has_many = (name, opts) =>
   source = opts.has_many
@@ -134,6 +201,21 @@ has_many = (name, opts) =>
       model = assert_model @@, source
       model\paginated build_query(@), fetch_opts
 
+  @relation_preloaders[name] = (objects, preload_opts) =>
+    model = assert_model @@, source
+    foreign_key = opts.key or "#{@@singular_name!}_id"
+
+    preload_opts or= {}
+    preload_opts.flip = true
+    preload_opts.many = true
+    preload_opts.for_relation = name
+    preload_opts.as = name
+
+    preload_opts.order or= opts.order
+    preload_opts.where or= opts.where
+
+    model\include_in objects, foreign_key, preload_opts
+
 polymorphic_belongs_to = (name, opts) =>
   import enum from require "lapis.db.model"
   types = opts.polymorphic_belongs_to
@@ -152,18 +234,22 @@ polymorphic_belongs_to = (name, opts) =>
 
   @[enum_name] = enum { assert(v[1], "missing type name"), k for k,v in pairs types}
 
-  @["preload_#{name}s"] = (objs, preload_opts) =>
+  @relation_preloaders[name] = (objs, preload_opts) =>
     fields = preload_opts and preload_opts.fields
 
     for {type_name, model_name} in *types
       model = assert_model @@, model_name
       filtered = [o for o in *objs when o[type_col] == @@[enum_name][type_name]]
       model\include_in filtered, id_col, {
+        for_relation: name
         as: name
         fields: fields and fields[type_name]
       }
 
     objs
+
+  -- TODO: deprecate this for the new `preload_relations` method
+  @["preload_#{name}s"] = @relation_preloaders[name]
 
   @[model_for_type_method] = (t) =>
     type_name = @[enum_name]\to_name t
@@ -201,7 +287,34 @@ polymorphic_belongs_to = (name, opts) =>
       with obj = model\find @[id_col]
         @[name] = obj
 
-{
+
+relation_builders = {
   :fetch, :belongs_to, :has_one, :has_many, :polymorphic_belongs_to,
-  :find_relation, :clear_loaded_relation, :LOADED_KEY
+}
+
+-- add_relations, Things, {
+--   {"user", has_one: "Users"}
+--   {"posts", has_many: "Posts", pager: true, order: "id ASC"}
+-- }
+add_relations = (relations) =>
+  cls = get_relations_class @
+
+  for relation in *relations
+    name = assert relation[1], "missing relation name"
+    built = false
+
+    for k in pairs relation
+      if builder = relation_builders[k]
+        builder cls, name, relation
+        built = true
+        break
+
+    continue if built
+
+    import flatten_params from require "lapis.logging"
+    error "don't know how to create relation `#{flatten_params relation}`"
+
+{
+  :relation_builders, :find_relation, :clear_loaded_relation, :LOADED_KEY
+  :add_relations, :get_relations_class, :mark_loaded_relations
 }

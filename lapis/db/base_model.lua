@@ -16,6 +16,11 @@ end
 local cjson = require("cjson")
 local OffsetPaginator
 OffsetPaginator = require("lapis.db.pagination").OffsetPaginator
+local add_relations, mark_loaded_relations
+do
+  local _obj_0 = require("lapis.db.model.relations")
+  add_relations, mark_loaded_relations = _obj_0.add_relations, _obj_0.mark_loaded_relations
+end
 local Enum
 do
   local _class_0
@@ -88,39 +93,6 @@ enum = function(tbl)
     tbl[tbl[key]] = key
   end
   return setmetatable(tbl, Enum.__base)
-end
-local add_relations
-add_relations = function(self, relations)
-  local relation_builders = require("lapis.db.model.relations")
-  for _index_0 = 1, #relations do
-    local _continue_0 = false
-    repeat
-      local relation = relations[_index_0]
-      local name = assert(relation[1], "missing relation name")
-      local built = false
-      for k in pairs(relation) do
-        do
-          local builder = relation_builders[k]
-          if builder then
-            builder(self, name, relation)
-            built = true
-            break
-          end
-        end
-      end
-      if built then
-        _continue_0 = true
-        break
-      end
-      local flatten_params
-      flatten_params = require("lapis.logging").flatten_params
-      error("don't know how to create relation `" .. tostring(flatten_params(relation)) .. "`")
-      _continue_0 = true
-    until true
-    if not _continue_0 then
-      break
-    end
-  end
 end
 local BaseModel
 do
@@ -236,7 +208,7 @@ do
   self.primary_key = "id"
   self.__inherited = function(self, child)
     do
-      local r = child.relations
+      local r = rawget(child, "relations")
       if r then
         return add_relations(child, r, self.db)
       end
@@ -404,6 +376,7 @@ do
     local fields = opts and opts.fields or "*"
     local flip = opts and opts.flip
     local many = opts and opts.many
+    local value_fn = opts and opts.value
     if not flip and type(self.primary_key) == "table" then
       error(tostring(self:table_name()) .. " must have singular primary key for include_in")
     end
@@ -458,6 +431,18 @@ do
         query = query .. (" and " .. self.db.encode_clause(opts.where))
       end
       do
+        local order = many and opts.order
+        if order then
+          query = query .. " order by " .. tostring(order)
+        end
+      end
+      do
+        local group = opts and opts.group
+        if group then
+          query = query .. " group by " .. tostring(group)
+        end
+      end
+      do
         local res = self.db.select(query)
         if res then
           local records = { }
@@ -468,12 +453,20 @@ do
               if records[t_key] == nil then
                 records[t_key] = { }
               end
-              insert(records[t_key], self:load(t))
+              local row = self:load(t)
+              if value_fn then
+                row = value_fn(row)
+              end
+              insert(records[t_key], row)
             end
           else
             for _index_0 = 1, #res do
               local t = res[_index_0]
-              records[t[find_by]] = self:load(t)
+              local row = self:load(t)
+              if value_fn then
+                row = value_fn(row)
+              end
+              records[t[find_by]] = row
             end
           end
           local field_name
@@ -492,6 +485,15 @@ do
           for _index_0 = 1, #other_records do
             local other = other_records[_index_0]
             other[field_name] = records[other[src_key]]
+            if many and not other[field_name] then
+              other[field_name] = { }
+            end
+          end
+          do
+            local for_relation = opts and opts.for_relation
+            if for_relation then
+              mark_loaded_relations(other_records, for_relation)
+            end
           end
         end
       end
@@ -608,22 +610,27 @@ do
       tbl = { }
     end
     local lua = require("lapis.lua")
-    do
-      local cls = lua.class(table_name, tbl, self)
+    local class_fields = {
+      "primary_key",
+      "timestamp",
+      "constraints",
+      "relations"
+    }
+    return lua.class(table_name, tbl, self, function(cls)
       cls.table_name = function()
         return table_name
       end
-      cls.primary_key = tbl.primary_key
-      cls.timestamp = tbl.timestamp
-      cls.constraints = tbl.constraints
-      return cls
-    end
+      for _index_0 = 1, #class_fields do
+        local f = class_fields[_index_0]
+        cls[f] = tbl[f]
+        cls.__base[f] = nil
+      end
+    end)
   end
   BaseModel = _class_0
 end
 return {
   BaseModel = BaseModel,
   Enum = Enum,
-  enum = enum,
-  add_relations = add_relations
+  enum = enum
 }

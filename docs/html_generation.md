@@ -1,5 +1,6 @@
-title: HTML Generation
---
+{
+  title: "HTML Generation"
+}
 <div class="override_lang"></div>
 
 # HTML Generation
@@ -17,9 +18,9 @@ all the features of MoonScript or Lua. No need to learn any goofy templating
 syntax with arbitrary restrictions.
 
 In the context of a HTML renderer, the environment exposes functions that
-create HTML tags. The tag builder functins are generated on the fly as you call
-them. The output of these functions is written into a buffer that is compiled
-in the end and returned as the result
+create HTML tags. The tag builder functions are generated on the fly as you
+call them. The output of these functions is written into a buffer that is
+compiled in the end and returned as the result
 
 Here are some examples of the HTML generation:
 
@@ -52,8 +53,28 @@ need to call `element "div"`.
 > If you want to create a `<table>` or `<select>` tag you'll need to use
 > `element` because Lua uses those names in the built-in modules.
 
-All strings passed to the HTML builder functions are escaped automatically. You
-never have to worry about introducing any cross site scripting vulnerabilities.
+All strings passed to the HTML builder functions (attribute names, values, or
+tag contents) are escaped automatically. You never have to worry about
+introducing any cross site scripting vulnerabilities.
+
+### Special attributes
+
+The `class` attribute can be passed as a table, and the class list will be
+constructed from it. The table can contain either array element, or hash
+elements:
+
+```moon
+div {
+  class: {"one", "two", three: false, four: true}
+}, "Hello world!"
+```
+
+Will generate:
+
+```html
+<html class="one two four">Hello world!</div>
+```
+
 
 ### Helper functions
 
@@ -180,7 +201,7 @@ print widget\render_to_string!
 ```
 
 If you want to use helpers like `@url_for` you also need to include them in the
-widget instance. Any object can be included as a helper, and it's methods will
+widget instance. Any object can be included as a helper, and its methods will
 be made available inside of the widget.
 
 ```moon

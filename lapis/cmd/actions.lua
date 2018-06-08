@@ -16,6 +16,10 @@ end
 local path = require("lapis.cmd.path")
 local colors = require("ansicolors")
 path = path:annotate()
+local set_path
+set_path = function(p)
+  path = p
+end
 local write_file_safe
 write_file_safe = function(file, content)
   if path.exists(file) then
@@ -76,8 +80,10 @@ actions = {
       write_file_safe("mime.types", require("lapis.cmd.templates.mime_types"))
       if flags.lua then
         write_file_safe("app.lua", require("lapis.cmd.templates.app_lua"))
+        write_file_safe("models.lua", require("lapis.cmd.templates.models_lua"))
       else
         write_file_safe("app.moon", require("lapis.cmd.templates.app"))
+        write_file_safe("models.moon", require("lapis.cmd.templates.models"))
       end
       if flags.git then
         write_file_safe(".gitignore", require("lapis.cmd.templates.gitignore")(flags))
@@ -352,5 +358,6 @@ return {
   actions = actions,
   execute = execute,
   get_action = get_action,
-  parse_flags = parse_flags
+  parse_flags = parse_flags,
+  set_path = set_path
 }
