@@ -4,10 +4,7 @@ do
   escape_pattern, parse_content_disposition, build_url = _obj_0.escape_pattern, _obj_0.parse_content_disposition, _obj_0.build_url
 end
 local run_after_dispatch
-do
-  local _obj_0 = require("lapis.nginx.context")
-  run_after_dispatch = _obj_0.run_after_dispatch
-end
+run_after_dispatch = require("lapis.nginx.context").run_after_dispatch
 local flatten_params
 flatten_params = function(t)
   local _tbl_0 = { }
@@ -112,12 +109,15 @@ local ngx_req = {
     return build_url(t.parsed_url)
   end,
   params_post = function(t)
-    if (t.headers["content-type"] or ""):match(escape_pattern("multipart/form-data")) then
-      return parse_multipart() or { }
-    else
+    local content_type = (t.headers["content-type"] or ""):lower()
+    local params
+    if content_type:match(escape_pattern("multipart/form-data")) then
+      params = parse_multipart()
+    elseif content_type:match(escape_pattern("application/x-www-form-urlencoded")) then
       ngx.req.read_body()
-      return flatten_params(ngx.req.get_post_args())
+      params = flatten_params(ngx.req.get_post_args())
     end
+    return params or { }
   end,
   params_get = function()
     return flatten_params(ngx.req.get_uri_args())

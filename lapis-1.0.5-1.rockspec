@@ -1,17 +1,17 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "lapis"
-version = "1.0.4-1"
+version = "1.0.5-1"
 
 -- LuaDist source
 source = {
-  tag = "1.0.4-1",
+  tag = "1.0.5-1",
   url = "git://github.com/LuaDist-testing/lapis.git"
 }
 -- Original source
 -- source = {
 -- 	url = "git://github.com/leafo/lapis.git",
--- 	branch = "v1.0.4",
+-- 	branch = "v1.0.5"
 -- }
 
 description = {
@@ -60,6 +60,7 @@ build = {
 		["lapis.db.base"] = "lapis/db/base.lua",
 		["lapis.db.migrations"] = "lapis/db/migrations.lua",
 		["lapis.db.model"] = "lapis/db/model.lua",
+		["lapis.db.pagination"] = "lapis/db/pagination.lua",
 		["lapis.db.schema"] = "lapis/db/schema.lua",
 		["lapis.environment"] = "lapis/environment.lua",
 		["lapis.etlua"] = "lapis/etlua.lua",
